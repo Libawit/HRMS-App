@@ -1,0 +1,254 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String @id @default(uuid())
+  email      String @unique
+  password   String
+  firstName  String
+  lastName   String
+  employeeId String @unique
+  role       String @default("Standard Employee")
+
+  // Relationships
+  departmentId  String?
+  departmentRel Department? @relation(fields: [departmentId], references: [id])
+
+  jobPositionId  String?
+  jobPositionRel JobPosition? @relation("UserToJobPosition", fields: [jobPositionId], references: [id])
+
+  // Leave Management Relationships
+  documents     Document[]
+  salaries      Salary[]
+  leaveBalances LeaveBalance[]
+  leaveRequests LeaveRequest[]
+  auditLogs     AuditLog[] 
+  attendance  Attendance[]
+
+  // Profile Information
+  profileImage          String?
+  dateOfBirth           DateTime?
+  gender                String?
+  nationalId            String?
+  maritalStatus         String?
+  workPhone             String?
+  hireDate              DateTime?
+  address               String?
+  emergencyContactName  String?
+  emergencyRelationship String?
+  emergencyPhone        String?
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Legacy fields
+  department  String?
+  jobPosition String?
+
+  telegramId       String?  
+  telegramVerified Boolean   @default(false)
+  otpCode          String?   
+  otpExpires       DateTime?
+}
+
+// Add this to your schema.prisma
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String   // The employee this record belongs to
+  action      String   // e.g., "Promotion", "Profile Update", "Document Added"
+  description String
+  performedBy String   // Name/ID of the Admin who did it
+  category    String   // e.g., "CAREER", "SECURITY", "PERSONAL"
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+
+model Department {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+  manager     String?
+  managerId   String? // Links to Employee ID
+
+  jobPositions JobPosition[]
+  users        User[]
+  documents    Document[]
+  salaries     Salary[]
+
+  // Hierarchy (Self-relation)
+  parentId String?
+  parent   Department?  @relation("DeptHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  subDepts Department[] @relation("DeptHierarchy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model JobPosition {
+  id           String      @id @default(uuid())
+  title        String      @unique
+  type         String      @default("Full-time")
+  salary       String?
+  requirements String?     @db.Text
+  description  String?     @db.Text
+  
+  // Relation to Department
+  departmentId String
+  department   Department  @relation(fields: [departmentId], references: [id])
+
+  // FIX: This is the "opposite relation field" Prisma is looking for
+  users        User[]      @relation("UserToJobPosition")
+
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model LeaveType {
+  id               String  @id @default(uuid())
+  name             String  @unique
+  color            String  @default("#7c3aed")
+  description      String?
+  requiresApproval Boolean @default(true)
+  maxDays          Int     @default(0)
+  accrual          String  @default("Fixed")
+
+  // Relationships
+  leaveBalances LeaveBalance[]
+  leaveRequests LeaveRequest[] // Added this to track requests per type
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model LeaveBalance {
+  id          String @id @default(uuid())
+  userId      String
+  leaveTypeId String
+  year        Int // e.g. 2026
+  month       Int // 0-11
+  allocated   Float  @default(0.0)
+  used        Float  @default(0.0)
+  carryOver   Float  @default(0.0)
+
+  // Relations
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, leaveTypeId, year])
+}
+
+// --- NEW MODEL: LEAVE REQUEST ---
+model LeaveRequest {
+  id          String @id @default(uuid())
+  userId      String
+  leaveTypeId String
+
+  startDate     DateTime
+  endDate       DateTime
+  daysRequested Float // Total days requested (e.g., 1.5)
+  reason        String?
+  status        LeaveStatus @default(PENDING) // PENDING, APPROVED, REJECTED
+
+  // Relations
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  appliedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// --- NEW MODEL: ATTENDANCE ---
+model Attendance {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  date         DateTime @default(now())
+  checkIn      DateTime?
+  checkOut     DateTime?
+  status       String   // "On Time", "Late", "Absent", "Half Day"
+  workHours    Float?   // Stored as decimal (e.g., 8.5)
+  notes        String?
+  stationId    String?
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+  @@index([date])
+}
+
+// --- NEW MODEL: Documents ---
+model Document {
+  id       String @id @default(uuid())
+  name     String // e.g., "Employee_NDA_2024.pdf"
+  fileUrl  String // The path/link to the actual file
+  category String // contracts, identity, certificates, payslips
+  size     String // e.g., "1.2 MB"
+
+  // Relations
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([departmentId])
+}
+
+// --- NEW MODEL: Salary ---
+model Salary {
+  id          String @id @default(uuid())
+  amountBasic Float  @default(0.0)
+  amountBonus Float  @default(0.0)
+  deductions  Float  @default(0.0)
+  netPay      Float  @default(0.0)
+
+  month  Int // 0-11 (JavaScript style)
+  year   Int // e.g., 2026
+  status SalaryStatus @default(PENDING)
+
+  // Relations
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, month, year]) // Prevents double-paying an employee for the same month
+  @@index([userId])
+  @@index([departmentId])
+}
+
+enum SalaryStatus {
+  PAID
+  PENDING
+  VOID
+}

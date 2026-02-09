@@ -1,0 +1,45 @@
+{
+  "dependencies": {
+    "@prisma/client": "^6.19.2",
+    "axios": "^1.13.4",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.2.4",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.0.2",
+    "node-telegram-bot-api": "^0.67.0",
+    "nodemailer": "^7.0.13",
+    "qrcode": "^1.5.4",
+    "telegraf": "^4.16.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11",
+    "prisma": "^6.19.2"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
+  "records": [
+    {
+      "id": "uuid",
+      "name": "John Doe",
+      "date": "2026-02-06",
+      "checkIn": "09:00",
+      "status": "On Time"
+    }
+  ],
+  "stats": {
+    "presentToday": 5,
+    "lateEntries": 1,
+    "totalAbsent": 0,
+    "avgWorkDay": "8.5h"
+  }
+}

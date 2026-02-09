@@ -1,0 +1,109 @@
+const { PrismaClient } = require('@prisma/client');
+const bcrypt = require('bcryptjs');
+
+const prisma = new PrismaClient();
+
+async function main() {
+  console.log('--- 🚀 Starting Full Database Seed ---');
+
+  // 1. Debug: Check Database Connection & Models
+  const availableModels = Object.keys(prisma).filter(k => !k.startsWith('_'));
+  console.log('Available models in Prisma:', availableModels);
+
+  if (!prisma.user || !prisma.department || !prisma.jobPosition) {
+    throw new Error("Missing models in Prisma Client. Ensure User, Department, and JobPosition are in your schema.prisma!");
+  }
+
+  // 2. Clear Old Data (Optional but recommended for a clean start)
+  console.log('🧹 Clearing old data...');
+  await prisma.user.deleteMany();
+  // Note: We don't delete departments/positions here to allow upserts to work
+  
+  // 3. Create Departments
+  console.log('🏢 Seeding Departments...');
+  const itDept = await prisma.department.upsert({
+    where: { name: 'IT & Engineering' },
+    update: {},
+    create: { name: 'IT & Engineering' },
+  });
+
+  const hrDept = await prisma.department.upsert({
+    where: { name: 'Human Resources' },
+    update: {},
+    create: { name: 'Human Resources' },
+  });
+
+  console.log('✅ Departments created');
+  // 6. Create Leave Types
+  console.log('📅 Seeding Leave Types...');
+  const leaveTypes = [
+    { name: 'Annual Leave', color: '#4CAF50', maxDays: 20, accrual: 'Monthly' },
+    { name: 'Sick Leave', color: '#F44336', maxDays: 12, accrual: 'Fixed' },
+    { name: 'Unpaid Leave', color: '#64748b', maxDays: 0, accrual: 'None' },
+  ];
+
+  for (const leave of leaveTypes) {
+    await prisma.leaveType.upsert({
+      where: { name: leave.name },
+      update: {},
+      create: leave,
+    });
+  }
+
+  // 4. Create Job Positions
+  console.log('💼 Seeding Job Positions...');
+  const positions = [
+    { title: 'Senior Fullstack Developer', type: 'Full-Time', departmentId: itDept.id },
+    { title: 'DevOps Engineer', type: 'Full-Time', departmentId: itDept.id },
+    { title: 'HR Manager', type: 'Full-Time', departmentId: hrDept.id },
+    { title: 'Recruitment Specialist', type: 'Part-Time', departmentId: hrDept.id },
+  ];
+
+  for (const pos of positions) {
+    const exists = await prisma.jobPosition.findFirst({
+      where: { title: pos.title }
+    });
+
+    if (!exists) {
+      await prisma.jobPosition.create({ data: pos });
+      console.log(`   + Created: ${pos.title}`);
+    } else {
+      console.log(`   ~ Skipped: ${pos.title} (Already exists)`);
+    }
+  }
+
+  // 5. Create Super Admin User
+  console.log('👤 Creating Super Admin...');
+  const hashedPassword = await bcrypt.hash('admin123', 12);
+
+  // We use the IT Dept for the Admin's initial record
+  await prisma.user.create({
+    data: {
+      email: 'admin@hrms.com',
+      password: hashedPassword,
+      firstName: 'System',
+      lastName: 'Administrator',
+      employeeId: 'ADM-001',
+      role: 'Admin',
+      gender: 'Male',
+      dateOfBirth: new Date('1990-01-01'),
+      hireDate: new Date(),
+      isActive: true,
+      // Connect to the IT department record we just ensured exists
+      departmentRel: { connect: { id: itDept.id } }
+    },
+  });
+
+  console.log('\n--- ✨ Seeding Finished Successfully ---');
+  console.log('📧 Admin Email: admin@hrms.com');
+  console.log('🔑 Admin Password: admin123');
+}
+
+main()
+  .catch((e) => {
+    console.error('\n❌ SEED ERROR:', e.message);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

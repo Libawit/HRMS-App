@@ -1,0 +1,120 @@
+import { Routes, Route, Navigate } from 'react-router-dom'
+import Login from './pages/Login' // Ensure this path is correct
+
+// Admin Imports
+import AdminLayout from './components/admin/AdminLayout'
+import Dashboard from './pages/admin/Dashboard'
+import Employee from './pages/admin/Employee'
+import AddEmployee from './pages/admin/AddEmployee'
+import EmployeeHistory from './pages/admin/EmployeeHistory'
+import Department from './pages/admin/Department'
+import JobPosition from './pages/admin/JobPosition'
+import LeaveType from './pages/admin/LeaveType'
+import LeaveBalance from './pages/admin/LeaveBalance'
+import LeaveRequest from './pages/admin/LeaveRequest'
+import LeaveCalendar from './pages/admin/LeaveCalendar'
+import AttendanceRecord from './pages/admin/AttendanceRecord'
+import TimeTracking from './pages/admin/TimeTracking'
+import Documents from './pages/admin/Documents'
+import Profile from './pages/admin/Profile'
+import Salary from './pages/admin/Salary'
+import Structure from './pages/admin/Structure'
+
+// Manager Imports
+import ManagerLayout from './components/manager/ManagerLayout'
+import ManagerDashboard from './pages/manager/Dashboard'
+import ManagerEmployee from './pages/manager/Employee'
+import ManagerEmployeeHistory from './pages/manager/EmployeeHistory'
+import ManagerDepartment from './pages/manager/Department'
+import ManagerJobPosition from './pages/manager/JobPosition'
+import ManagerLeaveType from './pages/manager/LeaveType'
+import ManagerLeaveBalance from './pages/manager/LeaveBalance'
+import ManagerLeaveRequest from './pages/manager/LeaveRequest'
+import ManagerLeaveCalendar from './pages/manager/LeaveCalendar'
+import ManagerAttendanceRecord from './pages/manager/AttendanceRecord'
+import ManagerTimeTracking from './pages/manager/TimeTracking'
+import ManagerDocuments from './pages/manager/Documents'
+import ManagerProfile from './pages/manager/Profile'
+import ManagerSalary from './pages/manager/Salary'
+import ManagerStructure from './pages/manager/Structure'
+
+// Employee Imports
+import EmployeeLayout from './components/employee/EmployeeLayout'
+import EmployeeDashboard from './pages/employee/Dashboard'
+import MyProfile from './pages/employee/Employee'
+import MyEmployeeHistory from './pages/employee/EmployeeHistory'
+import EmployeeDepartment from './pages/employee/Department'
+import EmployeeJobPosition from './pages/employee/JobPosition'
+import EmployeeLeaveType from './pages/employee/LeaveType'
+import EmployeeLeaveBalance from './pages/employee/LeaveBalance'
+import EmployeeLeaveRequest from './pages/employee/LeaveRequest'
+import EmployeeLeaveCalendar from './pages/employee/LeaveCalendar'
+import EmployeeAttendanceRecord from './pages/employee/AttendanceRecord'
+import EmployeeTimeTracking from './pages/employee/TimeTracking'
+import EmployeeDocuments from './pages/employee/Documents'
+import EmployeeProfile from './pages/employee/Profile'
+import EmployeeSalary from './pages/employee/Salary'
+import EmployeeStructure from './pages/employee/Structure'
+
+
+function App() {
+  return (
+    <Routes>
+      {/* 1. AUTHENTICATION ROUTE */}
+      <Route path="/login" element={<Login />} />
+
+      {/* 2. ROOT REDIRECT: Send unauthenticated users to login */}
+      <Route path="/" element={<Navigate to="/login" replace />} />
+
+      {/* 3. ADMIN ROUTES (Nested under AdminLayout) */}
+      <Route path="/admin" element={<AdminLayout />}>
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<Dashboard />} />
+        
+        {/* Employee Management */}
+        <Route path="employee" element={<Employee />} />
+        <Route path="add-employee" element={<AddEmployee />} />
+        <Route path="employee-history" element={<EmployeeHistory />} />
+
+        {/* Organization */}
+        <Route path="department" element={<Department />} />
+        <Route path="job-position" element={<JobPosition />} />
+        <Route path="structure" element={<Structure />} />
+        
+        {/* Leave Management */}
+        <Route path="leave-type" element={<LeaveType />} />
+        <Route path="leave-balance" element={<LeaveBalance />} />
+        <Route path="leave-request" element={<LeaveRequest />} /> 
+        <Route path="leave-calendar" element={<LeaveCalendar />} />
+
+        {/* Attendance & Payroll */}
+        <Route path="attendance-record" element={<AttendanceRecord />} />
+        <Route path="time-tracking" element={<TimeTracking />} />
+        <Route path="salary" element={<Salary />} />
+
+        {/* Utilities */}
+        <Route path="documents" element={<Documents />} />
+        <Route path="profile" element={<Profile />} />
+      </Route>
+
+      {/* 4. MANAGER ROUTES (Example structure) */}
+      <Route path="/manager" element={<ManagerLayout />}>
+         <Route path="dashboard" element={<div>Manager Dashboard</div>} />
+         <Route path="employee" element={<ManagerEmployee />} />
+         <Route path="leave-type" element={<ManagerLeaveType />} />
+         {/* Add Manager-specific pages here */}
+      </Route>
+
+      {/* 5. EMPLOYEE ROUTES (Example structure) */}
+      <Route path="/employee" element={<div>Employee Layout Placeholder</div>}>
+         <Route path="dashboard" element={<div>Employee Dashboard</div>} />
+         {/* Add Employee-specific pages here */}
+      </Route>
+
+      {/* 6. CATCH-ALL: Back to Login */}
+      <Route path="*" element={<Navigate to="/login" replace />} />
+    </Routes>
+  )
+}
+
+export default App
