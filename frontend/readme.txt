@@ -40,9 +40,3 @@ npx prisma studio
 npx prisma migrate dev --name add_job_position_relation
 
 npm install multer
-
-npx localtunnel --port 3000
-
-npx ngrok config add-authtoken 39Qq7VB2Zbb6j4piynhvgVkBhK2_7xTfM3ShrbHmAgZLkR35q
-
-npx ngrok http 3000

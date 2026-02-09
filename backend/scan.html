@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body style="background: #111; color: white; display: flex; align-items: center; justify-content: center; height: 100vh;">
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        
+        // This opens the Telegram Camera instantly
+        tg.showScanQrPopup({
+            text: "Align QR code with the frame"
+        }, function(text) {
+            // This sends the QR data (e.g., STATION_001) back to the bot
+            tg.sendData(text); 
+            tg.closeScanQrPopup();
+            tg.close();
+            return true;
+        });
+    </script>
+</body>
+</html>
