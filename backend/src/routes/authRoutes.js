@@ -4,22 +4,28 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const authController = require('../controllers/authController');
+const os = require('os');
 
 const { protect } = require('../middleware/authMiddleware');
 
-// 1. Ensure uploads directory exists
 const uploadDir = 'uploads';
+
+// This check is the "shield". If the folder exists (because you pushed it), 
+// it skips the mkdirSync line and doesn't crash.
 if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
+    console.log("Uploads folder missing, attempting to create...");
+    // Only try to create if we are NOT on Vercel
+    if (process.env.NODE_ENV !== 'production') {
+        fs.mkdirSync(uploadDir);
+    }
 }
 
-// 2. Configure Storage for Profile Pictures
+// 2. Configure Storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/'); 
+    cb(null, uploadDir); // Use the variable we defined above
   },
   filename: (req, file, cb) => {
-    // Unique filename: profile-timestamp.extension
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     cb(null, 'profile-' + uniqueSuffix + path.extname(file.originalname));
   }
