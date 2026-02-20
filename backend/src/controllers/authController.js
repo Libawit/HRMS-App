@@ -50,10 +50,10 @@ exports.login = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, role: user.role },
-      process.env.JWT_SECRET || 'supersecretkey123',
-      { expiresIn: '1d' }
-    );
+  { id: user.id, role: user.role }, // This "role" is frozen in the token
+  process.env.JWT_SECRET,
+  { expiresIn: '1d' }
+);
 
     res.json({
       token,
@@ -149,18 +149,43 @@ exports.register = async (req, res) => {
 // --- GET ALL EMPLOYEES ---
 exports.getAllEmployees = async (req, res) => {
   try {
-    const employees = await prisma.user.findMany({
-      // THIS BLOCK IS THE FIX
-      include: {
-        departmentRel: true,   // Connects to the Department model
-        jobPositionRel: true   // Connects to the JobPosition model
-      },
-      orderBy: {
-        createdAt: 'desc'
+    let whereClause = {};
+
+    // 1. ROLE-BASED ACCESS CONTROL
+    // If the user is an ADMIN, the whereClause remains {} (unfiltered).
+    
+    if (req.user && req.user.role === 'Manager') {
+      // MANAGER LOGIC: Filter by their assigned Department
+      const managerData = await prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: { departmentId: true }
+      });
+
+      if (managerData && managerData.departmentId) {
+        whereClause.departmentId = managerData.departmentId;
+      } else {
+        // Fallback: If manager has no dept assigned, show empty to be safe
+        whereClause.id = 'none'; 
       }
+    } 
+    
+    else if (req.user && req.user.role === 'Employee') {
+      // EMPLOYEE LOGIC: Filter specifically to their own ID
+      // This ensures the "Directory" returns only their information
+      whereClause.id = req.user.id;
+    }
+
+    // 2. FETCH DATA
+    const employees = await prisma.user.findMany({
+      where: whereClause,
+      include: {
+        departmentRel: true,
+        jobPositionRel: true
+      },
+      orderBy: { createdAt: 'desc' }
     });
 
-    // We strip passwords before sending to frontend
+    // 3. SECURE RESPONSE
     const safeEmployees = employees.map(user => {
       const { password, ...userWithoutPassword } = user;
       return userWithoutPassword;
@@ -168,8 +193,8 @@ exports.getAllEmployees = async (req, res) => {
 
     res.json(safeEmployees);
   } catch (error) {
-    console.error("Error fetching employees:", error);
-    res.status(500).json({ message: "Failed to fetch employee directory" });
+    console.error("DETAILED BACKEND ERROR:", error);
+    res.status(500).json({ message: "Server error", detail: error.message });
   }
 };
 
@@ -179,50 +204,78 @@ exports.updateEmployee = async (req, res) => {
     const { id } = req.params;
     const data = req.body;
 
-    const existingUser = await prisma.user.findUnique({ 
-      where: { id },
-      include: { departmentRel: true, jobPositionRel: true } 
-    });
-    
+    const existingUser = await prisma.user.findUnique({ where: { id } });
     if (!existingUser) return res.status(404).json({ message: "User not found" });
 
+    // 1. Destructure to extract the fields that need special handling
     const { 
-      departmentId, jobPositionId, allowLogin, 
-      employeeId, nationalId, ...otherData 
+      departmentId, 
+      jobPositionId, 
+      allowLogin, 
+      dateOfBirth, 
+      hireDate, 
+      telegramVerified, // Extracted to fix the String vs Boolean crash
+      // Explicitly pull these out so they DON'T go into 'otherData'
+      department, 
+      jobPosition, 
+      auditLogs, 
+      departmentRel, 
+      jobPositionRel,
+      otpCode,
+      otpExpires,
+      telegramId,
+      ...otherData 
     } = data;
 
-    // ... (Keep your existing ID conflict detection logic here)
-
-    let profileImageUrl = existingUser.profileImage;
-    if (req.file) {
-      // (Keep your existing file deletion logic here)
-      profileImageUrl = getFileUrl(req, req.file.filename);
-    }
-
+    // 2. Build the main update object
     const updatePayload = {
-        ...otherData,
-        employeeId,
-        nationalId,
-        profileImage: profileImageUrl,
-        isActive: allowLogin === 'true' || allowLogin === true,
+      ...otherData,
+      // Handle the Booleans (FormData sends them as strings "true"/"false")
+      isActive: allowLogin === 'true' || allowLogin === true,
     };
 
-    if (otherData.dateOfBirth) updatePayload.dateOfBirth = new Date(otherData.dateOfBirth);
-    if (otherData.hireDate) updatePayload.hireDate = new Date(otherData.hireDate);
+    // 3. FIX: Handle telegramVerified conversion specifically
+    if (telegramVerified !== undefined) {
+      updatePayload.telegramVerified = telegramVerified === 'true' || telegramVerified === true;
+    }
 
+    // 4. Handle Profile Image
+    if (req.file) {
+      // Assuming getFileUrl is a helper function you have defined
+      updatePayload.profileImage = getFileUrl(req, req.file.filename);
+    }
+
+    // 5. Clean up specific fields that cause Prisma crashes
     delete updatePayload.id;
     delete updatePayload.createdAt;
+    delete updatePayload.updatedAt;
+    delete updatePayload.password; // Never update password via this route
 
+    // 6. Safe Date Conversion
+    if (dateOfBirth && dateOfBirth !== "" && dateOfBirth !== "null") {
+      updatePayload.dateOfBirth = new Date(dateOfBirth);
+    } else {
+      updatePayload.dateOfBirth = null;
+    }
+
+    if (hireDate && hireDate !== "" && hireDate !== "null") {
+      updatePayload.hireDate = new Date(hireDate);
+    } else {
+      updatePayload.hireDate = null;
+    }
+
+    // 7. Execute the Update with Relationship Logic
     const updatedUser = await prisma.user.update({
       where: { id: id },
       data: {
         ...updatePayload,
-        departmentRel: (departmentId && departmentId !== "null" && departmentId !== "") 
+        // Only attempt to connect if the ID is a valid string (not empty)
+        departmentRel: (departmentId && departmentId.trim() !== "") 
           ? { connect: { id: departmentId } } 
-          : undefined,
-        jobPositionRel: (jobPositionId && jobPositionId !== "null" && jobPositionId !== "") 
+          : { disconnect: true },
+        jobPositionRel: (jobPositionId && jobPositionId.trim() !== "") 
           ? { connect: { id: jobPositionId } } 
-          : undefined
+          : { disconnect: true }
       },
       include: {
         departmentRel: true,
@@ -230,34 +283,23 @@ exports.updateEmployee = async (req, res) => {
       }
     });
 
-    // --- SELF-EDIT LOGIC: Generate New Token if editing self ---
-    // If the ID in the URL matches the ID from the JWT (req.user.id)
-    let newToken = null;
-    if (req.user && req.user.id === id) {
-        newToken = jwt.sign(
-            { id: updatedUser.id, role: updatedUser.role },
-            process.env.JWT_SECRET || 'supersecretkey123',
-            { expiresIn: '1d' }
-        );
-    }
-
-    // --- AUDIT LOGS ---
-    await createAuditLog(id, "Record Updated", `Profile updated by ${req.user?.id === id ? 'Self' : 'Admin'}`, "GENERAL");
-
     res.json({ 
       message: "Employee updated successfully", 
-      employee: {
-        ...updatedUser,
-        department: updatedUser.departmentRel?.name || "Unassigned",
-        jobPosition: updatedUser.jobPositionRel?.title || "No Position"
-      },
-      token: newToken // Send this back so frontend can update local storage
+      employee: updatedUser 
     });
 
   } catch (error) {
-    if (req.file) fs.unlinkSync(req.file.path);
-    console.error("UPDATE ERROR:", error);
-    res.status(500).json({ message: "Update failed", error: error.message });
+    // If there's a file upload and a crash happens, delete the local file to save space
+    if (req.file && req.file.path) {
+        try { fs.unlinkSync(req.file.path); } catch (e) { console.error("Unlink error:", e); }
+    }
+    
+    console.error("CRITICAL BACKEND ERROR:", error); 
+    
+    res.status(500).json({ 
+      message: "Server Crash", 
+      detail: error.message 
+    });
   }
 };
 
@@ -319,6 +361,7 @@ exports.getEmployeeHistory = async (req, res) => {
 // --- METADATA & SEARCH ---
 exports.getDepartments = async (req, res) => {
   try {
+    // Admin sees all, or you could filter these too if needed
     const departments = await prisma.department.findMany({ orderBy: { name: 'asc' } });
     res.json(departments);
   } catch (error) {
@@ -340,62 +383,177 @@ exports.getPositions = async (req, res) => {
 
 exports.getAllUsersForSearch = async (req, res) => {
   try {
-    const { q } = req.query; // Get search term from URL: ?q=name
-    
+    // 1. Destructure deptId from query (it will be undefined on other pages)
+    const { q, role, deptId } = req.query; 
+    let whereClause = {};
+
+    // 2. Name Search Logic
+    if (q) {
+      whereClause.OR = [
+        { firstName: { contains: q, mode: 'insensitive' } },
+        { lastName: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
+    // 3. Role Logic
+    if (role) {
+      whereClause.role = { equals: role, mode: 'insensitive' };
+    }
+
+    // 4. Department Logic (SAFE: only triggers if deptId is passed)
+    if (deptId) {
+      whereClause.departmentId = deptId;
+    }
+
     const users = await prisma.user.findMany({
-      where: q ? {
-        OR: [
-          { firstName: { contains: q, mode: 'insensitive' } },
-          { lastName: { contains: q, mode: 'insensitive' } },
-          { email: { contains: q, mode: 'insensitive' } },
-          { employeeId: { contains: q, mode: 'insensitive' } }
-        ]
-      } : {}, // If no query, return all or empty
-      select: { id: true, firstName: true, lastName: true, email: true, employeeId: true, profileImage: true },
-      take: 10 // Limit results for performance
+      where: whereClause,
+      select: { 
+        id: true, 
+        firstName: true, 
+        lastName: true, 
+        profileImage: true, 
+        role: true,
+        departmentId: true 
+      },
+      take: 50 
     });
 
-    const formatted = users.map(u => ({
+    res.json(users.map(u => ({
       id: u.id,
-      name: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
-      email: u.email,
-      employeeId: u.employeeId,
-      image: u.profileImage
-    }));
-
-    res.json(formatted);
+      name: `${u.firstName} ${u.lastName}`,
+      firstName: u.firstName, // Helpful for avatar letters
+      lastName: u.lastName,
+      image: u.profileImage,
+      role: u.role,
+      departmentId: u.departmentId 
+    })));
   } catch (error) {
-    res.status(500).json({ message: "Search error", error: error.message });
+    console.error("Search Error:", error);
+    res.status(500).json({ message: "Search error" });
+  }
+};
+
+// --- STRUCTURE DATA ---
+exports.getStructureData = async (req, res) => {
+  try {
+    const employees = await prisma.user.findMany({
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        profileImage: true,
+        departmentRel: { select: { name: true } },
+        jobPositionRel: { select: { title: true } },
+        reportsTo: { select: { firstName: true, lastName: true } },
+        telegramVerified: true
+      }
+    });
+    res.json(employees);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 };
 
 
-
-// --- GET LOGGED-IN USER PROFILE ---
+// --- GET ME ---
 exports.getMe = async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
+      include: { departmentRel: true, jobPositionRel: true }
+    });
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const { password, ...userData } = user;
+    res.json({
+      ...userData,
+      department: user.departmentRel?.name || "Unassigned",
+      jobPosition: user.jobPositionRel?.title || "No Position"
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+exports.updateProfile = async (req, res) => {
+  try {
+    const id = req.user.id; // Get ID from the 'protect' middleware, not the URL
+    const { firstName, lastName, email, phone, address, password } = req.body;
+
+    const updatePayload = {
+      firstName,
+      lastName,
+      email,
+      workPhone: phone, // Map frontend 'phone' to DB 'workPhone'
+      address,
+    };
+
+    // 1. Handle Password Hashing
+    if (password && password.trim() !== "") {
+      const salt = await bcrypt.genSalt(10);
+      updatePayload.password = await bcrypt.hash(password, salt);
+    }
+
+    // 2. Handle Profile Image
+    if (req.file) {
+      // Use your existing helper getFileUrl if you have it
+      updatePayload.profileImage = `/uploads/${req.file.filename}`;
+    }
+
+    // 3. Update only the allowed fields
+    const updatedUser = await prisma.user.update({
+      where: { id: id },
+      data: updatePayload,
       include: {
         departmentRel: true,
         jobPositionRel: true
       }
     });
 
-    if (!user) return res.status(404).json({ message: "User not found" });
+    // Remove password before sending back
+    delete updatedUser.password;
 
-    const { password, ...userData } = user;
+    res.json({
+      message: "Profile updated successfully",
+      user: updatedUser
+    });
 
-    // We "flatten" the related names so the frontend can easily find them
-    const responseData = {
-      ...userData,
-      department: user.departmentRel?.name || user.department || "Unassigned",
-      jobPosition: user.jobPositionRel?.title || user.jobPosition || "No Position"
-    };
-
-    res.json(responseData);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("UPDATE PROFILE ERROR:", error);
+    res.status(500).json({ message: "Server Error", detail: error.message });
+  }
+};
+
+// --- GET DASHBOARD STATS ---
+exports.getDashboardStats = async (req, res) => {
+  try {
+    const totalEmployees = await prisma.user.count();
+    const totalDepartments = await prisma.department.count();
+    const totalPositions = await prisma.jobPosition.count();
+    const activeEmployees = await prisma.user.count({ where: { isActive: true } });
+    
+    // FETCH REAL PENDING LEAVES
+    const pendingLeaves = await prisma.leaveRequest.count({
+      where: { status: "PENDING" }
+    });
+    
+    const activePercentage = totalEmployees > 0 
+      ? Math.round((activeEmployees / totalEmployees) * 100) 
+      : 0;
+
+    res.json({
+      totalEmployees,
+      totalDepartments,
+      totalPositions,
+      activeEmployees,
+      activePercentage,
+      pendingLeaves // This is now real data from your LeaveRequest model
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching stats", error: error.message });
   }
 };
 

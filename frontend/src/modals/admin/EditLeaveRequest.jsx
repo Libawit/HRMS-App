@@ -9,7 +9,7 @@ import {
   Clock,
   MessageSquare
 } from 'lucide-react';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 
 const EditLeaveRequest = ({ isOpen, onClose, theme = 'dark', data, onRefresh }) => {
   const [loading, setLoading] = useState(false);
@@ -48,22 +48,29 @@ const EditLeaveRequest = ({ isOpen, onClose, theme = 'dark', data, onRefresh }) 
   };
 
   // --- Handle Status Update ---
-  // Inside EditLeaveRequest.jsx
-const handleUpdate = async (newStatus) => {
+  const handleUpdate = async (newStatus) => {
   setLoading(true);
   try {
-    // 1. Added '/status' to the end of the URL
-    // 2. Changed axios.put to axios.patch
+    // 1. Calculate the number of days based on the current visible dates
+    const daysRequested = calculateDays(formData.startDate, formData.endDate);
+
+    // 2. Send EVERYTHING to the backend
     const response = await axios.patch(
-      `http://localhost:3000/api/auth/leave-requests/${data.id}/status`, 
-      { status: newStatus }
+      `http://localhost:5000/api/auth/leave-requests/${data.id}/status`, 
+      { 
+        status: newStatus,
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        adminComment: formData.adminComment,
+        daysRequested: daysRequested // Critical for the backend balance logic
+      }
     );
     
     if (onRefresh) onRefresh();
     onClose();
   } catch (err) {
     console.error("Update failed:", err.response?.data || err.message);
-    alert(err.response?.data?.error || "Failed to update status");
+    alert(err.response?.data?.error || "Failed to update request");
   } finally {
     setLoading(false);
   }

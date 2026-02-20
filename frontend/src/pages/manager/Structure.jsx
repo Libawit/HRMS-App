@@ -1,29 +1,88 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { 
-  Users, GitMerge, Search, Plus, Edit, 
-  Trash2, Eye, ShieldCheck, UserPlus, 
-  RefreshCcw, ChevronRight, Share2,
-  ChevronLeft, Lock
+  Users, GitMerge, Search, Edit, Eye, ShieldCheck, 
+  ChevronRight, Share2, ChevronLeft, Lock, Loader2, X, Trash2
 } from 'lucide-react';
+import axios from '../../utils/axiosConfig';
 
-// Import Modals
 import EditStructure from '../../modals/manager/EditStructure';
-import ViewStructure from '../../modals/manager/ViewStructure'; // Path updated to manager context
+import ViewStructure from '../../modals/manager/ViewStructure';
+
+const API_BASE = "http://localhost:5000/api";
+
+// --- Recursive Tree Node Component ---
+const TreeNode = ({ node, isDark, getDisplayName }) => {
+  const [isOpen, setIsOpen] = useState(true);
+  const hasChildren = node.children && node.children.length > 0;
+
+  return (
+    <div className="ml-8 border-l-2 border-[#7c3aed]/20 pl-6 my-4 relative">
+      {/* Connector Line Design */}
+      <div className="absolute left-0 top-8 w-6 h-0.5 bg-[#7c3aed]/20" />
+      
+      <div className={`inline-flex items-center gap-4 p-4 rounded-2xl border ${
+        isDark ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200'
+      } shadow-sm min-w-75`}>
+        <div className="w-10 h-10 rounded-xl bg-linear-to-tr from-[#7c3aed] to-purple-400 flex items-center justify-center text-white font-black text-xs">
+          {getDisplayName(node.employee).charAt(0)}
+        </div>
+        
+        <div className="flex-1">
+          <p className={`text-sm font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>
+            {getDisplayName(node.employee)}
+          </p>
+          <p className="text-[10px] font-bold text-[#7c3aed] uppercase tracking-wider">
+            {node.jobPosition?.title || node.employee?.jobPositionRel?.title || 'Team Member'}
+          </p>
+        </div>
+
+        {hasChildren && (
+          <button 
+            onClick={() => setIsOpen(!isOpen)}
+            className={`p-1.5 rounded-lg hover:bg-[#7c3aed]/10 text-[#7c3aed] transition-all transform ${isOpen ? 'rotate-90' : ''}`}
+          >
+            <ChevronRight size={16} />
+          </button>
+        )}
+      </div>
+
+      {hasChildren && isOpen && (
+        <div className="animate-in fade-in slide-in-from-left-2 duration-300">
+          {node.children.map(child => (
+            <TreeNode key={child.id} node={child} isDark={isDark} getDisplayName={getDisplayName} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const Structure = () => {
-  // --- Context Integration ---
-  const context = useOutletContext();
-  const theme = context?.theme || 'dark';
-  const managerDept = context?.managerDept || 'IT'; 
+  const { theme, user } = useOutletContext();
+  const isDark = theme === 'dark';
 
+  // --- State Hooks ---
   const [activeTab, setActiveTab] = useState('assignment');
   const [searchTerm, setSearchTerm] = useState('');
+  const [assignments, setAssignments] = useState([]);
+  const [allUsers, setAllUsers] = useState([]); 
+  const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+  const itemsPerPage = 8;
+
+  const [empSearch, setEmpSearch] = useState('');
+  const [supSearch, setSupSearch] = useState('');
+  const [showEmpResults, setShowEmpResults] = useState(false);
+  const [showSupResults, setShowSupResults] = useState(false);
+
+  const empSearchRef = useRef(null);
+  const supSearchRef = useRef(null);
 
   const [newAssignment, setNewAssignment] = useState({
+    employeeId: '',
     employeeName: '',
+    supervisorId: '',
     supervisorName: ''
   });
 
@@ -31,243 +90,333 @@ const Structure = () => {
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [selectedRelationship, setSelectedRelationship] = useState(null);
 
-  const isDark = theme === 'dark';
-
-  const [assignments, setAssignments] = useState([
-    { id: 1, emp: "Thomas Clark", dept: "Finance", pos: "Accountant", role: "Supervisor", supervisor: "Sarah Johnson", img: "https://i.pravatar.cc/32?img=11" },
-    { id: 2, emp: "Sarah Johnson", dept: "HR", pos: "HR Director", role: "Admin", supervisor: "John Smith", img: "https://i.pravatar.cc/32?img=5" },
-    { id: 3, emp: "Kevin Hart", dept: "ICT", pos: "DevOps", role: "Staff", supervisor: "Michael Chen", img: "https://i.pravatar.cc/32?img=8" },
-    { id: 5, emp: "Michael Chen", dept: "ICT", pos: "Lead Dev", role: "Supervisor", supervisor: "John Smith", img: "https://i.pravatar.cc/32?img=13" },
-    { id: 7, emp: "Robert Wilson", dept: "ICT", pos: "Backend Dev", role: "Staff", supervisor: "Michael Chen", img: "https://i.pravatar.cc/32?img=2" },
-  ]);
-
-  const departmentalData = useMemo(() => {
-    return assignments.filter(a => a.dept === managerDept);
-  }, [assignments, managerDept]);
-
-  const handleUpdateHierarchy = () => {
-    if (!newAssignment.employeeName || !newAssignment.supervisorName) return;
-    setAssignments(prev => prev.map(asg => 
-      asg.emp === newAssignment.employeeName 
-      ? { ...asg, supervisor: newAssignment.supervisorName } 
-      : asg
-    ));
-    setNewAssignment({ employeeName: '', supervisorName: '' });
+  // --- Helpers ---
+  const getDisplayName = (emp) => {
+    if (!emp) return '';
+    const fullName = emp.name || emp.fullName || '';
+    const firstLast = (emp.firstName || emp.first_name) ? `${emp.firstName || emp.first_name} ${emp.lastName || emp.last_name || ''}`.trim() : '';
+    return fullName || firstLast || emp.email?.split('@')[0] || 'Unknown User';
   };
 
-  const handleSaveEdit = (updatedData) => {
-    setAssignments(prev => prev.map(asg => asg.id === updatedData.id ? updatedData : asg));
-    setIsEditOpen(false);
-  };
+  const fetchData = useCallback(async () => {
+    if (!user?.departmentId) return;
 
-  const handleDelete = (id) => {
-    if(window.confirm("Remove this reporting relationship?")) {
-      setAssignments(prev => prev.filter(a => a.id !== id));
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+
+      const [structureRes, userRes] = await Promise.all([
+        axios.get(`${API_BASE}/structure?departmentId=${user.departmentId}`, config),
+        axios.get(`${API_BASE}/auth/users`, config)
+      ]);
+
+      setAssignments(Array.isArray(structureRes.data) ? structureRes.data : []);
+      const deptUsers = Array.isArray(userRes.data) 
+        ? userRes.data.filter(u => String(u.departmentId) === String(user.departmentId))
+        : [];
+      setAllUsers(deptUsers);
+    } catch (err) {
+      console.error("Fetch failed", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.departmentId]);
+
+  // --- Effects ---
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (empSearchRef.current && !empSearchRef.current.contains(event.target)) setShowEmpResults(false);
+      if (supSearchRef.current && !supSearchRef.current.contains(event.target)) setShowSupResults(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // --- Tree Logic ---
+  const treeData = useMemo(() => {
+    if (!assignments.length) return [];
+    
+    const idMap = {};
+    // First pass: create nodes
+    assignments.forEach(item => {
+      idMap[item.employeeId] = { ...item, children: [] };
+    });
+
+    const roots = [];
+    // Second pass: link children to parents
+    assignments.forEach(item => {
+      const node = idMap[item.employeeId];
+      if (item.managerId && idMap[item.managerId]) {
+        idMap[item.managerId].children.push(node);
+      } else {
+        roots.push(node);
+      }
+    });
+    return roots;
+  }, [assignments]);
+
+  // --- Memos ---
+  const empSearchResults = useMemo(() => {
+    const query = empSearch.toLowerCase().trim();
+    if (!query || !allUsers.length) return [];
+    return allUsers.filter(u => getDisplayName(u).toLowerCase().includes(query) || (u.email || '').toLowerCase().includes(query));
+  }, [allUsers, empSearch]);
+
+  const supSearchResults = useMemo(() => {
+    const query = supSearch.toLowerCase().trim();
+    if (!query) return [];
+    const filtered = allUsers.filter(u => 
+      String(u.id) !== String(newAssignment.employeeId) && 
+      getDisplayName(u).toLowerCase().includes(query)
+    );
+    return [{ id: 'none', fullName: 'None (Self Reporting)' }, ...filtered];
+  }, [allUsers, supSearch, newAssignment.employeeId]);
+
+  const filteredAssignments = useMemo(() => {
+    return assignments.filter(item => {
+      const name = getDisplayName(item.employee).toLowerCase();
+      const pos = (item.jobPosition?.title || item.employee?.jobPositionRel?.title || '').toLowerCase();
+      return name.includes(searchTerm.toLowerCase()) || pos.includes(searchTerm.toLowerCase());
+    });
+  }, [assignments, searchTerm]);
+
+  const totalPages = Math.ceil(filteredAssignments.length / itemsPerPage);
+  const currentTableData = filteredAssignments.slice((currentPage - 1) * itemsPerPage, (currentPage - 1) * itemsPerPage + itemsPerPage);
+
+  // --- Handlers ---
+  const handleUpdateHierarchy = async () => {
+    if (!newAssignment.employeeId || !newAssignment.supervisorId) return;
+    try {
+      const token = localStorage.getItem('token');
+      const managerIdValue = newAssignment.supervisorId === 'none' ? null : newAssignment.supervisorId;
+      await axios.post(`${API_BASE}/structure/sync`, {
+        employeeId: newAssignment.employeeId,
+        managerId: managerIdValue
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      
+      setNewAssignment({ employeeId: '', employeeName: '', supervisorId: '', supervisorName: '' });
+      setEmpSearch('');
+      setSupSearch('');
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to update reporting line");
     }
   };
 
-  const filteredAssignments = useMemo(() => {
-    return departmentalData.filter(a => 
-      a.emp.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [departmentalData, searchTerm]);
+  const handleDeleteRelationship = async (id) => {
+    if (!window.confirm("Are you sure you want to remove this reporting line?")) return;
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`${API_BASE}/structure/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to delete relationship");
+    }
+  };
 
-  const currentTableData = filteredAssignments.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  if (!user) {
+    return (
+      <div className={`flex-1 flex items-center justify-center min-h-screen ${isDark ? 'bg-[#020617]' : 'bg-slate-50'}`}>
+        <Loader2 className="animate-spin text-[#7c3aed]" size={40} />
+      </div>
+    );
+  }
+
+  const managerDeptName = user?.departmentRel?.name || 'Department';
 
   const styles = {
-    card: `${isDark ? 'bg-[#0b1220] border-white/10' : 'bg-white border-slate-200 shadow-sm'} border rounded-[2rem] overflow-hidden`,
-    tabBtn: (active) => `py-4 text-sm font-bold transition-all border-b-2 px-6 ${
+    card: `${isDark ? 'bg-[#0b1220] border-white/10 shadow-2xl' : 'bg-white border-slate-200 shadow-sm'} border rounded-[2.5rem] overflow-hidden`,
+    tabBtn: (active) => `py-4 text-xs font-black uppercase tracking-[0.2em] transition-all border-b-2 px-6 ${
       active ? 'text-[#7c3aed] border-[#7c3aed]' : `border-transparent ${isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600'}`
     }`,
-    input: `w-full p-3.5 rounded-xl border ${isDark ? 'bg-[#0f1623] border-white/10 text-white' : 'bg-white border-slate-200'} text-sm font-bold outline-none focus:border-[#7c3aed] transition-all`
+    input: `w-full p-4 rounded-2xl border ${isDark ? 'bg-[#0f1623] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} text-sm font-bold outline-none focus:border-[#7c3aed] transition-all`,
+    dropdown: `absolute z-50 w-full mt-2 rounded-2xl border shadow-2xl max-h-60 overflow-y-auto ${isDark ? 'bg-[#1e293b] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-700'}`
   };
 
   return (
-    <main className={`flex-1 p-6 md:p-10 ${isDark ? 'bg-[#020617]' : 'bg-slate-50'} overflow-y-auto`}>
-      {/* Header Area */}
-      <div className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+    <main className={`flex-1 p-6 md:p-10 ${isDark ? 'bg-[#020617]' : 'bg-slate-50'} overflow-y-auto min-h-screen`}>
+      {/* Header */}
+      <div className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Lock size={12} className="text-[#7c3aed]" />
-            <p className="text-[11px] font-bold text-[#94a3b8] uppercase tracking-widest">{managerDept} Department Control</p>
+          <div className="flex items-center gap-2 mb-3">
+            <Lock size={14} className="text-[#7c3aed]" />
+            <p className="text-[11px] font-black text-[#7c3aed] uppercase tracking-[0.3em]">{managerDeptName} Operations</p>
           </div>
-          <h1 className={`text-4xl font-black tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>Team Structure</h1>
+          <h1 className={`text-4xl font-black tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>Department Structure</h1>
         </div>
-        <button className="flex items-center gap-2 bg-[#7c3aed]/10 border border-[#7c3aed]/20 px-5 py-3.5 rounded-2xl text-xs font-black text-[#7c3aed] hover:bg-[#7c3aed] hover:text-white transition-all">
-          <Share2 size={16}/> EXPORT DEPT MAP
+        <button className="flex items-center gap-2 bg-[#7c3aed] px-6 py-4 rounded-2xl text-[11px] font-black text-white hover:bg-[#6d28d9] transition-all shadow-xl shadow-purple-500/20 uppercase tracking-widest">
+          <Share2 size={16}/> Export Map
         </button>
       </div>
 
       <div className={styles.card}>
-        <div className="flex gap-4 px-8 border-b border-white/5 overflow-x-auto no-scrollbar">
+        {/* Tabs */}
+        <div className={`flex gap-4 px-8 border-b ${isDark ? 'border-white/5 bg-white/2' : 'border-slate-100 bg-slate-50/50'}`}>
           <button onClick={() => setActiveTab('assignment')} className={styles.tabBtn(activeTab === 'assignment')}>
-            <div className="flex items-center gap-2 whitespace-nowrap"><Users size={18}/> Manage Reports</div>
+            <div className="flex items-center gap-2 whitespace-nowrap"><Users size={16}/> Reporting Lines</div>
           </button>
           <button onClick={() => setActiveTab('relationships')} className={styles.tabBtn(activeTab === 'relationships')}>
-            <div className="flex items-center gap-2 whitespace-nowrap"><GitMerge size={18}/> Visual Tree</div>
+            <div className="flex items-center gap-2 whitespace-nowrap"><GitMerge size={16}/> Tree View</div>
           </button>
         </div>
 
-        <div className="p-8">
+        <div className="p-8 lg:p-10">
           {activeTab === 'assignment' ? (
-            <div className="space-y-8 animate-in fade-in duration-300">
+            <div className="space-y-10">
               {/* Assignment Form */}
               <div className={`p-8 rounded-[2.5rem] border-2 border-dashed ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-200 bg-slate-50'}`}>
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-[#7c3aed]/10 text-[#7c3aed] flex items-center justify-center">
-                    <UserPlus size={20}/>
-                  </div>
-                  <h3 className={`text-sm font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>Assign Supervisor within {managerDept}</h3>
-                </div>
-
                 <div className="flex flex-col md:flex-row gap-6 items-end">
-                  <div className="flex-1 space-y-2">
-                    <label className="text-[10px] font-black text-[#94a3b8] uppercase tracking-widest ml-1">Team Member</label>
-                    <select 
-                      value={newAssignment.employeeName}
-                      onChange={(e) => setNewAssignment({...newAssignment, employeeName: e.target.value})}
+                  <div className="flex-1 space-y-2 relative" ref={empSearchRef}>
+                    <label className="text-[10px] font-black text-[#7c3aed] uppercase tracking-widest ml-1">Team Member</label>
+                    <input 
+                      type="text"
+                      placeholder="Type name or email..."
                       className={styles.input}
-                    >
-                      <option value="">Select Employee...</option>
-                      {departmentalData.map(a => <option key={a.id} value={a.emp}>{a.emp}</option>)}
-                    </select>
+                      value={empSearch}
+                      onChange={(e) => {setEmpSearch(e.target.value); setShowEmpResults(true);}}
+                      onFocus={() => setShowEmpResults(true)}
+                    />
+                    {showEmpResults && empSearch && (
+                      <div className={styles.dropdown}>
+                        {empSearchResults.length > 0 ? empSearchResults.map(emp => (
+                          <div key={emp.id} className="p-4 text-xs font-black cursor-pointer hover:bg-[#7c3aed] hover:text-white transition-colors border-b last:border-0 border-white/5"
+                            onClick={() => {
+                              setNewAssignment(prev => ({...prev, employeeId: emp.id, employeeName: getDisplayName(emp)}));
+                              setEmpSearch(getDisplayName(emp));
+                              setShowEmpResults(false);
+                            }}
+                          >
+                            {getDisplayName(emp)} <span className="opacity-50 font-bold ml-2">({emp.email})</span>
+                          </div>
+                        )) : <div className="p-4 text-xs text-slate-500 italic">No members found</div>}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex-1 space-y-2">
-                    <label className="text-[10px] font-black text-[#94a3b8] uppercase tracking-widest ml-1">Report To</label>
-                    <select 
-                      value={newAssignment.supervisorName}
-                      onChange={(e) => setNewAssignment({...newAssignment, supervisorName: e.target.value})}
+
+                  <div className="flex-1 space-y-2 relative" ref={supSearchRef}>
+                    <label className="text-[10px] font-black text-[#7c3aed] uppercase tracking-widest ml-1">Assign Supervisor</label>
+                    <input 
+                      type="text"
+                      placeholder="Search supervisor..."
                       className={styles.input}
-                    >
-                      <option value="">Select Supervisor...</option>
-                      {assignments.filter(a => a.role !== 'Staff').map(a => <option key={a.id} value={a.emp}>{a.emp} ({a.dept})</option>)}
-                    </select>
+                      value={supSearch}
+                      onChange={(e) => {setSupSearch(e.target.value); setShowSupResults(true);}}
+                      onFocus={() => setShowSupResults(true)}
+                    />
+                    {showSupResults && supSearch && (
+                      <div className={styles.dropdown}>
+                        {supSearchResults.map(emp => (
+                          <div key={emp.id} className="p-4 text-xs font-black cursor-pointer hover:bg-[#7c3aed] hover:text-white transition-colors border-b last:border-0 border-white/5"
+                            onClick={() => {
+                              setNewAssignment(prev => ({...prev, supervisorId: emp.id, supervisorName: getDisplayName(emp)}));
+                              setSupSearch(getDisplayName(emp));
+                              setShowSupResults(false);
+                            }}
+                          >
+                            {getDisplayName(emp)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <button onClick={handleUpdateHierarchy} className="bg-[#7c3aed] text-white px-8 py-4 rounded-2xl font-black text-xs hover:bg-[#6d28d9] transition-all shadow-xl shadow-purple-500/20 flex items-center gap-2">
-                    <Plus size={16}/> UPDATE RELATION
+
+                  <button onClick={handleUpdateHierarchy} disabled={!newAssignment.employeeId || !newAssignment.supervisorId}
+                    className="bg-[#7c3aed] disabled:opacity-30 text-white px-10 py-4 rounded-2xl font-black text-[11px] hover:bg-[#6d28d9] transition-all shadow-xl shadow-purple-500/20 uppercase">
+                    Sync Relationship
                   </button>
                 </div>
               </div>
 
-              {/* Scoped Table */}
+              {/* Table List */}
               <div className="space-y-6">
-                <div className="relative">
-                  <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-[#94a3b8]" size={18} />
-                  <input 
-                    type="text" 
-                    placeholder={`Search within ${managerDept}...`} 
-                    className={`${styles.input} pl-14 py-4`}
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
+                <div className="relative group">
+                  <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-[#7c3aed]" size={20} />
+                  <input type="text" placeholder={`Search members...`} className={`${styles.input} pl-14 py-5`}
+                    value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="text-[10px] text-[#94a3b8] uppercase tracking-widest border-b border-white/5">
-                        <th className="pb-5 px-4 font-black">Member</th>
-                        <th className="pb-5 px-4 font-black">Current Role</th>
-                        <th className="pb-5 px-4 font-black">Direct Supervisor</th>
-                        <th className="pb-5 px-4 font-black text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {currentTableData.map(item => (
-                        <tr key={item.id} className="group hover:bg-white/2 transition-colors">
-                          <td className="py-5 px-4">
-                            <div className="flex items-center gap-3">
-                              <img src={item.img} className="w-10 h-10 rounded-2xl border border-white/10" alt=""/>
-                              <span className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{item.emp}</span>
-                            </div>
-                          </td>
-                          <td className="py-5 px-4">
-                            <span className="text-[10px] font-black uppercase text-[#7c3aed] bg-[#7c3aed]/10 px-2 py-1 rounded-md">{item.pos}</span>
-                          </td>
-                          <td className="py-5 px-4">
-                            <div className="flex items-center gap-2 text-xs font-bold text-[#94a3b8]">
-                              <ShieldCheck size={14} className="text-[#7c3aed]"/>
-                              {item.supervisor}
-                            </div>
-                          </td>
-                          <td className="py-5 px-4 text-right">
-                            <div className="flex justify-end gap-2">
-                              <button 
-                                onClick={() => { setSelectedRelationship(item); setIsViewOpen(true); }} 
-                                className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-emerald-400 transition-all"
-                                title="View Relationship Details"
-                              >
-                                <Eye size={18}/>
-                              </button>
-                              <button 
-                                onClick={() => { setSelectedRelationship(item); setIsEditOpen(true); }} 
-                                className="p-2 hover:bg-blue-500/10 rounded-lg text-slate-400 hover:text-blue-500 transition-all"
-                              >
-                                <Edit size={18}/>
-                              </button>
-                              <button 
-                                onClick={() => handleDelete(item.id)} 
-                                className="p-2 hover:bg-red-500/10 rounded-lg text-slate-400 hover:text-red-500 transition-all"
-                              >
-                                <Trash2 size={18}/>
-                              </button>
-                            </div>
-                          </td>
+                  {loading ? (
+                    <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#7c3aed]" size={40}/></div>
+                  ) : (
+                    <table className="w-full text-left border-separate border-spacing-y-3">
+                      <thead>
+                        <tr className="text-[10px] text-slate-500 uppercase tracking-[0.2em] font-black px-6">
+                          <th className="pb-4 px-6">Member</th>
+                          <th className="pb-4 px-6">Position</th>
+                          <th className="pb-4 px-6">Direct Supervisor</th>
+                          <th className="pb-4 px-6 text-right">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {currentTableData.map(item => (
+                          <tr key={item.id} className="group">
+                            <td className={`py-6 px-6 rounded-l-3xl border-y border-l ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-white'}`}>
+                              <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-xl bg-linear-to-tr from-[#7c3aed] to-purple-400 flex items-center justify-center text-white font-black text-[10px]">
+                                  {getDisplayName(item.employee).charAt(0)}
+                                </div>
+                                <span className={`text-sm font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{getDisplayName(item.employee)}</span>
+                              </div>
+                            </td>
+                            <td className={`py-6 px-6 border-y ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-white'}`}>
+                              <span className="text-[10px] font-black uppercase text-[#7c3aed] bg-[#7c3aed]/10 px-3 py-1 rounded-lg">
+                                {item.jobPosition?.title || item.employee?.jobPositionRel?.title || 'Staff'}
+                              </span>
+                            </td>
+                            <td className={`py-6 px-6 border-y ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-white'}`}>
+                              <div className="flex items-center gap-2 text-[11px] font-black">
+                                {item.manager ? (
+                                  <><ShieldCheck size={14} className="text-emerald-500"/> <span className="text-slate-500">{getDisplayName(item.manager)}</span></>
+                                ) : <><div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" /><span className="text-amber-600 uppercase italic">Self Reporting</span></>}
+                              </div>
+                            </td>
+                            <td className={`py-6 px-6 rounded-r-3xl border-y border-r text-right ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-white'}`}>
+                              <div className="flex justify-end gap-2">
+                                <button onClick={() => { setSelectedRelationship(item); setIsViewOpen(true); }} className="p-2.5 rounded-xl hover:bg-slate-500/10 text-slate-500 transition-all"><Eye size={18}/></button>
+                                <button onClick={() => { setSelectedRelationship(item); setIsEditOpen(true); }} className="p-2.5 rounded-xl hover:bg-blue-500/10 text-slate-500 hover:text-blue-500 transition-all"><Edit size={18}/></button>
+                                <button onClick={() => handleDeleteRelationship(item.id)} className="p-2.5 rounded-xl hover:bg-red-500/10 text-slate-500 hover:text-red-500 transition-all"><Trash2 size={18}/></button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
             </div>
           ) : (
-            /* Scoped Tree View */
-            <div className="animate-in slide-in-from-right-4 duration-500">
-              <div className="min-h-125 border border-white/5 rounded-[2.5rem] bg-white/1 p-10 flex flex-col items-center">
-                <div className="mb-12 text-center">
-                   <h3 className={`text-2xl font-black tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>{managerDept} Team Map</h3>
-                </div>
-
-                <div className="flex flex-col items-center gap-12 w-full">
-                  {departmentalData.map((member, idx) => (
-                    <div key={member.id} className="relative flex flex-col items-center">
-                      {idx !== 0 && <div className="absolute -top-12 w-0.5 h-12 bg-[#7c3aed]/30"></div>}
-                      <div 
-                        onClick={() => { setSelectedRelationship(member); setIsViewOpen(true); }} 
-                        className={`w-72 p-6 rounded-4xl border ${isDark ? 'bg-[#0f172a] border-white/10' : 'bg-white border-slate-200'} hover:border-[#7c3aed] transition-all cursor-pointer text-center group`}
-                      >
-                        <div className="relative inline-block">
-                          <img src={member.img} className="w-16 h-16 rounded-2xl mx-auto mb-4 border-2 border-[#7c3aed]/20 group-hover:scale-105 transition-all" alt=""/>
-                          <div className="absolute -bottom-1 -right-1 bg-[#7c3aed] p-1 rounded-lg text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Eye size={10} />
-                          </div>
-                        </div>
-                        <h4 className={`font-black text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{member.emp}</h4>
-                        <p className="text-[10px] font-bold text-[#7c3aed] uppercase tracking-widest">{member.pos}</p>
-                      </div>
-                    </div>
+            /* Tree View Section */
+            <div className="py-10 overflow-x-auto">
+              {treeData.length > 0 ? (
+                <div className="min-w-max p-4">
+                  <div className="mb-8 flex items-center gap-3 bg-[#7c3aed]/10 w-fit px-4 py-2 rounded-full border border-[#7c3aed]/20">
+                    <ShieldCheck size={14} className="text-[#7c3aed]" />
+                    <span className="text-[10px] font-black uppercase text-[#7c3aed] tracking-widest">Department Hierarchy</span>
+                  </div>
+                  {treeData.map(root => (
+                    <TreeNode key={root.id} node={root} isDark={isDark} getDisplayName={getDisplayName} />
                   ))}
                 </div>
-              </div>
+              ) : (
+                <div className="flex flex-col items-center py-20 opacity-30">
+                  <GitMerge size={60} className="mb-4" />
+                  <p className="font-black uppercase tracking-widest text-xs">No hierarchy data found</p>
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Modal Components */}
-      <ViewStructure 
-        isOpen={isViewOpen} 
-        onClose={() => setIsViewOpen(false)} 
-        data={selectedRelationship} 
-        theme={theme}
-      />
-      <EditStructure 
-        isOpen={isEditOpen} 
-        onClose={() => setIsEditOpen(false)} 
-        data={selectedRelationship} 
-        onSave={handleSaveEdit} 
-        theme={theme}
-      />
+      {isViewOpen && <ViewStructure isOpen={isViewOpen} onClose={() => setIsViewOpen(false)} data={selectedRelationship} theme={theme} />}
+      {isEditOpen && <EditStructure isOpen={isEditOpen} onClose={() => setIsEditOpen(false)} data={selectedRelationship} onSave={fetchData} theme={theme} />}
     </main>
   );
 };

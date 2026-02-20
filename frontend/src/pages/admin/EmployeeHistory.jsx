@@ -32,20 +32,31 @@ const EmployeeHistory = () => {
     subText: `text-[11px] uppercase font-black tracking-[0.2em] ${isDark ? 'text-slate-500' : 'text-slate-400'}`,
   };
 
-  // --- FETCH DIRECTORY (Matches your working Port 3000) ---
+  // --- FETCH DIRECTORY ---
   useEffect(() => {
-    const fetchEmployees = async () => {
-      try {
-        const res = await fetch('http://localhost:3000/api/auth/employees');
-        if (!res.ok) throw new Error('Failed to fetch');
-        const data = await res.json();
+  const fetchEmployees = async () => {
+    try {
+      const token = localStorage.getItem('token'); // 1. Get Token
+
+      const res = await fetch('http://localhost:5000/api/auth/employees', {
+        headers: {
+          'Authorization': `Bearer ${token}` // 2. Add Header
+        }
+      });
+
+      if (!res.ok) throw new Error('Failed to fetch');
+      const data = await res.json();
+
+      // 3. Add safety check
+      if (Array.isArray(data)) {
         setEmployees(data);
-      } catch (err) {
-        console.error("Directory Load Error:", err);
       }
-    };
-    fetchEmployees();
-  }, []);
+    } catch (err) {
+      console.error("Directory Load Error:", err);
+    }
+  };
+  fetchEmployees();
+}, []);
 
   // --- DEBOUNCE SEARCH (Your Logic) ---
   useEffect(() => {
@@ -61,25 +72,32 @@ const EmployeeHistory = () => {
   });
 
   // --- FETCH INDIVIDUAL HISTORY ---
-  const handleSelectEmployee = async (emp) => {
-    setSelectedEmployee(null);
-    setSearchTerm(`${emp.firstName} ${emp.lastName}`);
-    setShowResults(false);
-    setIsLoadingLogs(true);
+const handleSelectEmployee = async (emp) => {
+  setSelectedEmployee(null);
+  setSearchTerm(`${emp.firstName} ${emp.lastName}`);
+  setShowResults(false);
+  setIsLoadingLogs(true);
 
-    try {
-      const res = await fetch(`http://localhost:3000/api/auth/employees/${emp.id}/history`);
-      if (!res.ok) throw new Error('History not found');
-      const data = await res.json();
-      
-      setSelectedEmployee(data.details);
-      setHistoryLogs(data.logs);
-    } catch (err) {
-      console.error("Log Fetch Error:", err);
-    } finally {
-      setIsLoadingLogs(false);
-    }
-  };
+  try {
+    const token = localStorage.getItem('token'); // 1. Get Token
+
+    const res = await fetch(`http://localhost:5000/api/auth/employees/${emp.id}/history`, {
+      headers: {
+        'Authorization': `Bearer ${token}` // 2. Add Header
+      }
+    });
+
+    if (!res.ok) throw new Error('History not found');
+    const data = await res.json();
+    
+    setSelectedEmployee(data.details);
+    setHistoryLogs(data.logs);
+  } catch (err) {
+    console.error("Log Fetch Error:", err);
+  } finally {
+    setIsLoadingLogs(false);
+  }
+};
 
   return (
     <div className={styles.container}>

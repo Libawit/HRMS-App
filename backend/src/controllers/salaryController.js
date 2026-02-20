@@ -8,22 +8,31 @@ exports.getSalaries = async (req, res) => {
 
     let where = {};
 
-    // 1. Handle Date Filters (Must be Integers)
-    if (month !== undefined && month !== '') {
-      where.month = parseInt(month);
+    // 1. Strict Date Validation (Fixes 500 error)
+    if (month !== undefined && month !== '' && month !== 'null') {
+      const parsedMonth = parseInt(month);
+      if (!isNaN(parsedMonth)) {
+        where.month = parsedMonth;
+      }
     }
-    if (year !== undefined && year !== '') {
-      where.year = parseInt(year);
+    
+    if (year !== undefined && year !== '' && year !== 'null') {
+      const parsedYear = parseInt(year);
+      if (!isNaN(parsedYear)) {
+        where.year = parsedYear;
+      }
     }
 
-    // 2. Handle Department Filter
-    // Only apply if it's a valid ID and not the string "All"
-    if (departmentId && departmentId !== 'All' && departmentId !== 'undefined') {
+    // 2. Department Filtering (Compatible with Admin & Manager)
+    // Only apply filter if it's a valid ID and NOT 'All' (used by Admin)
+    if (departmentId && 
+        departmentId !== 'All' && 
+        departmentId !== 'undefined' && 
+        departmentId !== 'null') {
       where.departmentId = departmentId;
     }
 
-    // 3. Handle Search Filter
-    // Your schema has firstName and lastName, NOT name.
+    // 3. Search logic (Matches your User schema)
     if (search && search.trim() !== '') {
       where.user = {
         OR: [
@@ -53,12 +62,13 @@ exports.getSalaries = async (req, res) => {
 
     res.status(200).json(salaries);
   } catch (error) {
-    // This will print the EXACT reason in your terminal/console
     console.error("CRITICAL PRISMA ERROR:", error);
-    res.status(500).json({ message: "Internal Server Error", error: error.message });
+    res.status(500).json({ 
+      message: "An internal server error occurred.", 
+      error: error.message 
+    });
   }
 };
-
 // --- 2. CREATE SALARY ENTRY ---
 // --- 2. CREATE SALARY ENTRY ---
 exports.createSalary = async (req, res) => {

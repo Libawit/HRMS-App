@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body style="background: #111; color: white; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif;">
+    <div style="text-align: center;">
+        <h3>HRMS Scanner</h3>
+        <p>Opening Camera...</p>
+    </div>
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+        tg.showScanQrPopup({
+            text: "Scan Station QR Code"
+        }, function(text) {
+            tg.sendData(text);
+            tg.closeScanQrPopup();
+            tg.close();
+            return true;
+        });
+    </script>
+</body>
+</html>

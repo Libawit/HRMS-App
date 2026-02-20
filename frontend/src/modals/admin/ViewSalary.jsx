@@ -1,15 +1,11 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef } from 'react';
 import { 
-  X, Download, Printer, ShieldCheck, 
-  ArrowDownCircle, ArrowUpCircle, Building2, 
-  CheckCircle2, Clock, Loader2
+  X, Printer, ShieldCheck, Building2, 
+  CheckCircle2, Clock
 } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 
 const ViewSalary = ({ isOpen, onClose, salaryData, theme = 'dark' }) => {
   const payslipRef = useRef(null);
-  const [isExporting, setIsExporting] = useState(false);
   
   if (!isOpen || !salaryData) return null;
 
@@ -19,36 +15,6 @@ const ViewSalary = ({ isOpen, onClose, salaryData, theme = 'dark' }) => {
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
   ];
-
-  // --- PDF Download Logic ---
-  const handleDownloadPDF = async () => {
-    if (!payslipRef.current) return;
-    
-    setIsExporting(true);
-    try {
-      const element = payslipRef.current;
-      const canvas = await html2canvas(element, {
-        scale: 2, // Higher quality
-        useCORS: true,
-        backgroundColor: "#ffffff",
-      });
-      
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'px',
-        format: [canvas.width, canvas.height]
-      });
-
-      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-      const fileName = `Payslip_${salaryData.user?.firstName}_${months[salaryData.month]}_${salaryData.year}.pdf`;
-      pdf.save(fileName);
-    } catch (error) {
-      console.error("PDF Export failed:", error);
-    } finally {
-      setIsExporting(false);
-    }
-  };
 
   const handlePrint = () => {
     window.print();
@@ -114,18 +80,16 @@ const ViewSalary = ({ isOpen, onClose, salaryData, theme = 'dark' }) => {
             </div>
           </div>
 
-          <div className="mt-8 space-y-3">
+          <div className="mt-8">
             <button 
-              onClick={handleDownloadPDF}
-              disabled={isExporting}
-              className="w-full flex items-center justify-center gap-2 py-4 bg-[#7c3aed] hover:bg-[#6d28d9] text-white rounded-2xl text-xs font-black transition-all shadow-lg shadow-purple-500/20 disabled:opacity-50"
+              onClick={handlePrint} 
+              className="w-full flex items-center justify-center gap-2 py-4 bg-[#7c3aed] hover:bg-[#6d28d9] text-white rounded-2xl text-xs font-black transition-all shadow-lg shadow-purple-500/20"
             >
-              {isExporting ? <Loader2 className="animate-spin" size={16} /> : <Download size={16} />} 
-              {isExporting ? "GENERATING..." : "DOWNLOAD PDF"}
+              <Printer size={16} /> PRINT PAYSLIP
             </button>
-            <button onClick={handlePrint} className={`w-full flex items-center justify-center gap-2 py-4 border ${isDark ? 'border-white/10 hover:bg-white/5 text-white' : 'border-slate-200 hover:bg-slate-100 text-slate-600'} rounded-2xl text-xs font-black transition-all`}>
-              <Printer size={16} /> PRINT SLIP
-            </button>
+            <p className="text-[9px] text-center text-[#94a3b8] font-bold mt-4 uppercase tracking-tighter px-4">
+              Printer settings: Set "Layout" to Portrait and "Margins" to None for best results.
+            </p>
           </div>
         </aside>
 
@@ -149,7 +113,7 @@ const ViewSalary = ({ isOpen, onClose, salaryData, theme = 'dark' }) => {
                   <div className="w-8 h-8 bg-[#7c3aed] rounded-lg flex items-center justify-center text-white">
                     <Building2 size={18} />
                   </div>
-                  <h2 className="text-2xl font-black tracking-tighter">LyticalSMS</h2>
+                  <h2 className="text-2xl font-black tracking-tighter">HRMS</h2>
                 </div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Payroll Department</p>
               </div>
@@ -221,7 +185,7 @@ const ViewSalary = ({ isOpen, onClose, salaryData, theme = 'dark' }) => {
 
             <div className="mt-16 pt-8 border-t border-slate-100 flex justify-between items-center opacity-40">
               <div className="text-[7px] font-bold text-slate-400 uppercase max-w-50 leading-relaxed">
-                This document is a digital representation of the payroll record stored in the LyticalSMS ERP system.
+                This document is a digital representation of the payroll record stored in the HRMS ERP system.
               </div>
               <div className="flex flex-col items-end">
                 <div className="w-12 h-12 bg-slate-100 rounded-lg mb-1"></div>
@@ -241,7 +205,11 @@ const ViewSalary = ({ isOpen, onClose, salaryData, theme = 'dark' }) => {
             left: 0;
             top: 0;
             width: 100%;
+            background: white !important;
+            padding: 20px !important;
           }
+          /* Hide scrollbars during print */
+          ::-webkit-scrollbar { display: none; }
         }
       `}} />
     </div>

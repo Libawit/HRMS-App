@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Calendar, ListPlus, Save, Loader2 } from 'lucide-react';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 
 const AddLeaveTypeModal = ({ isOpen, onClose, theme = 'dark' }) => {
   const [loading, setLoading] = useState(false);
@@ -41,7 +41,7 @@ const AddLeaveTypeModal = ({ isOpen, onClose, theme = 'dark' }) => {
     setLoading(true);
     try {
       // API call to your backend
-      await axios.post('http://localhost:3000/api/auth/leave-types', {
+      await axios.post('http://localhost:5000/api/auth/leave-types', {
         ...formData,
         maxDays: parseInt(formData.maxDays) || 0
       });

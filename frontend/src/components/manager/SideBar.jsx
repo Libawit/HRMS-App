@@ -12,19 +12,25 @@ import {
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
-const SideBar = ({ isCollapsed, theme }) => {
+const SideBar = ({ isCollapsed, theme, user }) => {
   const [openMenus, setOpenMenus] = useState({});
   const location = useLocation();
 
+  // Helper to get initials from firstName and lastName
+  const getInitials = () => {
+    if (!user?.firstName && !user?.lastName) return 'MG';
+    const first = user?.firstName?.charAt(0) || '';
+    const last = user?.lastName?.charAt(0) || '';
+    return (first + last).toUpperCase();
+  };
+
   const toggleMenu = (menu) => {
     if (isCollapsed) return; 
-    // Logic: Only one menu can be open at a time
     setOpenMenus(prev => {
         const isOpen = prev[menu];
         return { [menu]: !isOpen };
     });
   };
-
 
   const menuItems = [
     { name: 'Dashboard', icon: <LayoutDashboard size={18}/>, path: '/manager/dashboard' },
@@ -70,13 +76,12 @@ const SideBar = ({ isCollapsed, theme }) => {
 
   const isActive = (path) => location.pathname === path;
 
-  // Theme Classes updated to match structure.html and sidebar&navbar.html
   const styles = {
     aside: theme === 'dark' 
       ? 'bg-[#0f172a] text-slate-300 border-white/5' 
       : 'bg-white text-slate-600 border-slate-200 shadow-xl',
-    hover: 'hover:bg-[#7c3aed26]', // Match purple-light
-    activeBtn: 'text-white bg-[#7c3aed]', // Match active purple
+    hover: 'hover:bg-[#7c3aed26]', 
+    activeBtn: 'text-white bg-[#7c3aed]', 
     subLinkActive: 'text-[#7c3aed] font-semibold bg-[#7c3aed1a] rounded-md',
     subLinkInactive: theme === 'dark' ? 'text-[#94a3b8]' : 'text-[#64748b]',
     logoText: theme === 'dark' ? 'text-white' : 'text-slate-900',
@@ -86,95 +91,104 @@ const SideBar = ({ isCollapsed, theme }) => {
   return (
     <aside className={`${isCollapsed ? 'w-20' : 'w-65'} transition-all duration-300 h-screen flex flex-col border-r overflow-hidden sticky top-0 left-0 z-50 ${styles.aside}`}>
           
-          {/* Brand Logo Section */}
-          <div className="p-6 shrink-0">
-            <div className="flex items-center gap-3 font-bold text-xl text-[#7c3aed] whitespace-nowrap">
-              <div className="w-8 h-8 min-w-8 bg-[#7c3aed] text-white rounded-lg flex items-center justify-center">
-                <Layers size={20} />
-              </div>
-              {!isCollapsed && <span className={`logo-text ${styles.logoText}`}>LyticalSMS</span>}
-            </div>
-            {!isCollapsed && (
-              <span className="block mt-1 text-[10px] text-[#94a3b8] font-bold tracking-widest uppercase">
-                DEPT. MANAGER
+      {/* Brand Logo Section */}
+      <div className="p-6 shrink-0">
+        <div className="flex items-center gap-3 font-bold text-xl text-[#7c3aed] whitespace-nowrap">
+          <div className="w-8 h-8 min-w-8 bg-[#7c3aed] text-white rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/20">
+            <Layers size={20} />
+          </div>
+          {!isCollapsed && <span className={`logo-text ${styles.logoText}`}>HRMS</span>}
+        </div>
+        {!isCollapsed && (
+          <span className="block mt-1 text-[10px] text-purple-500 font-bold tracking-widest uppercase">
+            {user?.role || 'MANAGER'}
           </span>
         )}
       </div>
 
       {/* Navigation Section */}
-            <nav className="flex-1 px-3 space-y-1 overflow-y-auto hide-scrollbar">
-              {menuItems.map((item) => (
-                <div key={item.name}>
-                  {item.subItems ? (
-                    <div className={`has-dropdown ${openMenus[item.name] ? 'open' : ''}`}>
-                      <button 
-                        onClick={() => toggleMenu(item.name)}
-                        className={`w-full flex items-center p-3 rounded-xl transition-colors ${
-                          isCollapsed ? 'justify-center' : 'justify-between'
-                        } ${
-                          !isCollapsed && item.subItems.some(sub => isActive(sub.path)) 
-                          ? styles.activeBtn 
-                          : styles.hover
+      <nav className="flex-1 px-3 space-y-1 overflow-y-auto hide-scrollbar">
+        {menuItems.map((item) => (
+          <div key={item.name}>
+            {item.subItems ? (
+              <div className={`has-dropdown ${openMenus[item.name] ? 'open' : ''}`}>
+                <button 
+                  onClick={() => toggleMenu(item.name)}
+                  className={`w-full flex items-center p-3 rounded-xl transition-colors ${
+                    isCollapsed ? 'justify-center' : 'justify-between'
+                  } ${
+                    !isCollapsed && item.subItems.some(sub => isActive(sub.path)) 
+                    ? styles.activeBtn 
+                    : styles.hover
+                  }`}
+                >
+                  <div className="flex items-center">
+                    <div className="w-6 flex items-center justify-center shrink-0">
+                        {item.icon}
+                    </div>
+                    {!isCollapsed && <span className="menu-text ml-3 text-sm font-medium whitespace-nowrap">{item.name}</span>}
+                  </div>
+                  {!isCollapsed && (
+                    <ChevronDown 
+                      size={10} 
+                      className={`chevron transition-transform duration-300 ${openMenus[item.name] ? 'rotate-180' : ''}`} 
+                    />
+                  )}
+                </button>
+                
+                {(!isCollapsed && openMenus[item.name]) && (
+                  <div className="submenu pl-12 flex flex-col space-y-2 mt-2">
+                    {item.subItems.map(sub => (
+                      <Link 
+                        key={sub.path} 
+                        to={sub.path} 
+                        className={`block py-2 px-3 text-[13px] transition-colors hover:text-[#7c3aed] ${
+                          isActive(sub.path) ? styles.subLinkActive : styles.subLinkInactive
                         }`}
                       >
-                        <div className="flex items-center">
-                          <div className="w-6 flex items-center justify-center shrink-0">
-                              {item.icon}
-                          </div>
-                          {!isCollapsed && <span className="menu-text ml-3 text-sm font-medium whitespace-nowrap">{item.name}</span>}
-                        </div>
-                        {!isCollapsed && (
-                          <ChevronDown 
-                            size={10} 
-                            className={`chevron transition-transform duration-300 ${openMenus[item.name] ? 'rotate-180' : ''}`} 
-                          />
-                        )}
-                      </button>
-                      
-                      {(!isCollapsed && openMenus[item.name]) && (
-                        <div className="submenu pl-12 flex flex-col space-y-2 mt-2">
-                          {item.subItems.map(sub => (
-                            <Link 
-                              key={sub.path} 
-                              to={sub.path} 
-                              className={`block py-2 px-3 text-[13px] transition-colors hover:text-[#7c3aed] ${
-                                isActive(sub.path) ? styles.subLinkActive : styles.subLinkInactive
-                              }`}
-                            >
-                              {sub.name}
-                            </Link>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <Link 
-                      to={item.path} 
-                      className={`flex items-center p-3 rounded-xl transition-colors ${
-                        isCollapsed ? 'justify-center' : ''
-                      } ${
-                        isActive(item.path) ? styles.activeBtn : styles.hover
-                      }`}
-                    >
-                      <div className="w-6 flex items-center justify-center shrink-0">
-                          {item.icon}
-                      </div>
-                      {!isCollapsed && <span className="menu-text ml-3 text-sm font-medium whitespace-nowrap">{item.name}</span>}
-                    </Link>
-                  )}
+                        {sub.name}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link 
+                to={item.path} 
+                className={`flex items-center p-3 rounded-xl transition-colors ${
+                  isCollapsed ? 'justify-center' : ''
+                } ${
+                  isActive(item.path) ? styles.activeBtn : styles.hover
+                }`}
+              >
+                <div className="w-6 flex items-center justify-center shrink-0">
+                    {item.icon}
                 </div>
-              ))}
-            </nav>
+                {!isCollapsed && <span className="menu-text ml-3 text-sm font-medium whitespace-nowrap">{item.name}</span>}
+              </Link>
+            )}
+          </div>
+        ))}
+      </nav>
 
-      {/* User Section */}
+      {/* User Section - Dynamic Data */}
       <div className={`p-5 border-t flex items-center gap-3 overflow-hidden shrink-0 ${styles.userSection}`}>
-        <div className="w-10 h-10 min-w-10 rounded-xl bg-[#7c3aed] flex items-center justify-center font-bold text-white shrink-0">
-          MC
+        <div className="w-10 h-10 min-w-10 rounded-xl overflow-hidden border border-purple-500/30 shrink-0 shadow-sm bg-linear-to-br from-[#7c3aed] to-[#9333ea] flex items-center justify-center font-bold text-white text-xs">
+          {user?.profileImage ? (
+            <img src={user.profileImage} alt="Profile" className="w-full h-full object-cover" />
+          ) : (
+            getInitials()
+          )}
         </div>
+
         {!isCollapsed && (
           <div className="user-info truncate">
-            <p className={`text-[13px] font-semibold truncate ${styles.logoText}`}>Michael Chen</p>
-            <p className="text-[11px] text-[#94a3b8] truncate">Manager</p>
+            <p className={`text-[13px] font-bold truncate leading-tight ${styles.logoText}`}>
+              {user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Manager User'}
+            </p>
+            <p className="text-[11px] text-[#94a3b8] font-medium truncate">
+              {user?.department || 'Operations'}
+            </p>
           </div>
         )}
       </div>

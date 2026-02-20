@@ -3,7 +3,7 @@ import {
   X, Save, User, Briefcase, Calculator, ArrowUpCircle, 
   ArrowDownCircle, Loader2, Search, Calendar, AlertTriangle
 } from 'lucide-react';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 import { toast } from 'react-hot-toast';
 
 const AddSalary = ({ isOpen, onClose, onSave, theme = 'dark' }) => {
@@ -49,7 +49,7 @@ const AddSalary = ({ isOpen, onClose, onSave, theme = 'dark' }) => {
       const fetchEmployees = async () => {
         setLoading(true);
         try {
-          const res = await axios.get('http://localhost:3000/api/auth/users');
+          const res = await axios.get('http://localhost:5000/api/auth/users');
           const data = Array.isArray(res.data) ? res.data : [];
           
           // Use the exact same formatting logic as AddDocuments
@@ -112,7 +112,7 @@ const AddSalary = ({ isOpen, onClose, onSave, theme = 'dark' }) => {
         year: parseInt(formData.year),
       };
 
-      await axios.post('http://localhost:3000/api/salaries', payload);
+      await axios.post('http://localhost:5000/api/salaries', payload);
       toast.success("Salary record created successfully!");
       onSave();
       handleClose();

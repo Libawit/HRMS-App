@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 import { 
   X, CloudUpload, FileText, Search, 
   Trash2, Loader2, User 
@@ -37,7 +37,7 @@ const AddDocuments = ({ isOpen, onClose, onUpload, theme = 'dark' }) => {
       const fetchEmployees = async () => {
         setLoading(true);
         try {
-          const res = await axios.get('http://localhost:3000/api/auth/users');
+          const res = await axios.get('http://localhost:5000/api/auth/users');
           const data = Array.isArray(res.data) ? res.data : [];
           
           const formatted = data.map(emp => ({
@@ -108,7 +108,7 @@ const handleUpload = async () => {
     const deptId = selectedEmployee.departmentId || "";
     formData.append('departmentId', deptId);
 
-    await axios.post('http://localhost:3000/api/documents', formData, {
+    await axios.post('http://localhost:5000/api/documents', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
 

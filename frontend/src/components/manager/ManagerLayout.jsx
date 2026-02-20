@@ -1,24 +1,53 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
+import API from '../../utils/axiosConfig'; // ✅ Use your configured API instance
 import SideBar from './SideBar';
 import NavBar from '../NavBar';
 
 const ManagerLayout = () => {
+  const navigate = useNavigate();
+
   // 1. State for Sidebar Collapse
   const [isCollapsed, setIsCollapsed] = useState(false);
   
   // 2. State for Theme (Defaulting to dark)
   const [theme, setTheme] = useState('dark');
 
-  // 3. Manager Context - Identifying the department this manager controls
-  const [managerInfo] = useState({
-    name: "Michael Chen",
-    role: "Department Manager",
-    department: "ICT",
-    avatar: "MC"
-  });
+  // 3. Real User State - Fetching from backend logic
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // 4. Theme Toggle Logic
+  // 4. Fetch User Data on Mount
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          navigate('/login'); // Redirect if no token
+          setLoading(false);
+          return;
+        }
+
+        // ✅ Using your API instance handles the baseURL and the token interceptor
+        const response = await API.get('/auth/me');
+
+        setUser(response.data);
+      } catch (error) {
+        console.error("Error fetching manager data:", error);
+        // If token is invalid/expired (401), send to login
+        if (error.response?.status === 401) {
+          localStorage.removeItem('token');
+          navigate('/login');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserData();
+  }, [navigate]);
+
+  // 5. Theme Toggle Logic
   useEffect(() => {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
@@ -32,25 +61,29 @@ const ManagerLayout = () => {
     setIsCollapsed(!isCollapsed);
   };
 
+  // Prevent UI flicker while loading user data
+  if (loading) return null;
+
   return (
     <div className={`flex h-screen transition-colors duration-300 ${
       theme === 'dark' ? 'bg-[#020617]' : 'bg-slate-50'
     }`}>
       
-      {/* SIDEBAR: Configured for Manager menu items */}
+      {/* SIDEBAR: Receives the real user object */}
       <SideBar 
         isCollapsed={isCollapsed} 
         theme={theme} 
-        managerInfo={managerInfo} 
+        user={user} 
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         
-        {/* NAVBAR: Handles sidebar toggle and theme switching */}
+        {/* NAVBAR: Shared component, passing user for avatar/name */}
         <NavBar 
           toggleSidebar={toggleSidebar} 
           theme={theme} 
           setTheme={setTheme} 
+          user={user}
         />
 
         {/* MAIN CONTENT AREA */}
@@ -58,10 +91,15 @@ const ManagerLayout = () => {
           theme === 'dark' ? 'text-white' : 'text-slate-900'
         }`}>
           <div className="max-w-400 mx-auto">
-            {/* Passing 'theme' and 'managerDept' via Outlet Context 
-               so child pages (Directory, Structure, etc.) can filter data automatically.
+            {/* Passing 'theme', 'user', and 'managerDept' via Outlet Context.
+                This allows child components to use: const { managerDept } = useOutletContext();
             */}
-            <Outlet context={{ theme, managerDept: managerInfo.department }} />
+            <Outlet context={{ 
+              theme, 
+              user, 
+              managerDept: user?.department || user?.departmentRel?.name || 'Department',
+              managerDeptId: user?.departmentId
+            }} />
           </div>
         </main>
       </div>

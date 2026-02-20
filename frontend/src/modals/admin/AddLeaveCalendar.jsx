@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 import { X, UserPlus, FilePlus, CheckCircle, Loader2, Search, Calendar } from 'lucide-react';
 
 const AddLeaveCalendar = ({ isOpen, onClose, theme = 'dark', onRefresh }) => {
@@ -41,8 +41,8 @@ const AddLeaveCalendar = ({ isOpen, onClose, theme = 'dark', onRefresh }) => {
         setLoading(true);
         try {
           const [empRes, typeRes] = await Promise.all([
-            axios.get('http://localhost:3000/api/auth/users'),
-            axios.get('http://localhost:3000/api/auth/leave-types')
+            axios.get('http://localhost:5000/api/auth/users'),
+            axios.get('http://localhost:5000/api/auth/leave-types')
           ]);
           setEmployees(Array.isArray(empRes.data) ? empRes.data : []);
           setLeaveTypes(Array.isArray(typeRes.data) ? typeRes.data : []);
@@ -107,7 +107,7 @@ const AddLeaveCalendar = ({ isOpen, onClose, theme = 'dark', onRefresh }) => {
 
     try {
       
-      const response = await axios.post("http://localhost:3000/api/auth/leave-requests", payload);
+      const response = await axios.post("http://localhost:5000/api/auth/leave-requests", payload);
       
       if (onRefresh) onRefresh();
       onClose();

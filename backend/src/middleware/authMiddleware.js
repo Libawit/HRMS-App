@@ -22,7 +22,8 @@ const protect = async (req, res, next) => {
           email: true,
           role: true,
           firstName: true,
-          lastName: true
+          lastName: true,
+          departmentId: true
         }
       });
 
@@ -57,4 +58,15 @@ const admin = (req, res, next) => {
   }
 };
 
-module.exports = { protect, admin };
+// 3. Manager: Checks if the user is a Manager, Admin, or HR
+const manager = (req, res, next) => {
+  const allowedRoles = ['Admin', 'HR Manager', 'Manager'];
+  
+  if (req.user && allowedRoles.includes(req.user.role)) {
+    next();
+  } else {
+    res.status(403).json({ message: 'Access denied: Requires Manager permissions' });
+  }
+};
+
+module.exports = { protect, admin, manager };

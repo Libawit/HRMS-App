@@ -42,21 +42,25 @@ const Department = () => {
   const fetchDepartments = useCallback(async () => {
   setIsLoading(true);
   try {
-    const response = await fetch('http://localhost:3000/api/auth/departments');
-    
-    const contentType = response.headers.get("content-type");
-    if (!response.ok || !contentType || !contentType.includes("application/json")) {
-      throw new Error(`Server error: ${response.status}`);
+    const token = localStorage.getItem('token'); // 1. Get the token
+    const response = await fetch('http://localhost:5000/api/auth/departments', {
+      headers: {
+        'Authorization': `Bearer ${token}`, // 2. Add the header
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.status === 401) {
+       // Optional: Redirect to login or show alert
+       console.error("Session expired");
+       return;
     }
 
     const data = await response.json();
-    setDepartments(data);
+    setDepartments(Array.isArray(data) ? data : []); // Ensure data is an array
   } catch (error) {
-    // This block catches ERR_CONNECTION_REFUSED
     console.error("Connection failed:", error.message);
-    setDepartments([]); // Prevent UI crashes
-    
-    // Optional: Set a local error state to show a "Server Offline" message to the user
+    setDepartments([]); 
   } finally {
     setIsLoading(false);
   }
@@ -97,21 +101,25 @@ const Department = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm("Delete this department and all sub-units? This cannot be undone.")) {
-      try {
-        const response = await fetch(`http://localhost:3000/api/auth/departments/${id}`, {
-          method: 'DELETE',
-        });
-        if (response.ok) {
-          fetchDepartments();
-        } else {
-          alert("Failed to delete. Ensure this department has no active employees.");
+  if (window.confirm("Delete this department and all sub-units? This cannot be undone.")) {
+    try {
+      const token = localStorage.getItem('token'); // Get token
+      const response = await fetch(`http://localhost:5000/api/auth/departments/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}` // Add protection
         }
-      } catch (error) {
-        console.error("Delete error:", error);
+      });
+      if (response.ok) {
+        fetchDepartments();
+      } else {
+        alert("Action unauthorized or department has active employees.");
       }
+    } catch (error) {
+      console.error("Delete error:", error);
     }
-  };
+  }
+};
 
   // --- Tree View Recursive Renderer ---
   const renderTreeBranch = (parentId = null, level = 0) => {

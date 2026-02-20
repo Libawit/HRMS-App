@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { X, Briefcase, Building2, DollarSign, AlignLeft, ChevronDown } from 'lucide-react';
 
+import api from '../../utils/axiosConfig'; // Ensure this path is correct
+
 const AddJobPositionModal = ({ isOpen, onClose, theme, departments, onSuccess }) => {
   const isDark = theme === 'dark';
   
@@ -17,33 +19,37 @@ const AddJobPositionModal = ({ isOpen, onClose, theme, departments, onSuccess })
   if (!isOpen) return null;
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    // 2. Validation check
-    if (!formData.departmentId) {
-      alert("Please select a department for this position.");
-      return;
-    }
+  e.preventDefault();
+  
+  if (!formData.departmentId) {
+    alert("Please select a department for this position.");
+    return;
+  }
 
-    try {
-      const response = await fetch('http://localhost:3000/api/auth/positions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+  try {
+    // USE API (AXIOS) INSTEAD OF FETCH
+    // It automatically adds your Auth token and handles JSON
+    const response = await api.post('/positions', formData);
+
+    if (response.status === 201 || response.status === 200) {
+      onSuccess(); 
+      onClose();   
+      setFormData({ 
+        title: '', 
+        type: 'Full-time', 
+        salary: '', 
+        departmentId: '', 
+        requirements: '', 
+        description: '' 
       });
-
-      if (response.ok) {
-        onSuccess(); // Refreshes the table in JobPosition.jsx
-        onClose();   // Closes the modal
-        setFormData({ title: '', type: 'Full-time', salary: '', departmentId: '', requirements: '', description: '' });
-      } else {
-        const errData = await response.json();
-        alert(`Error: ${errData.error}`);
-      }
-    } catch (error) {
-      console.error("Submission error:", error);
     }
-  };
+  } catch (error) {
+    console.error("Submission error:", error);
+    // Axios puts the error message in error.response.data
+    const message = error.response?.data?.error || "Failed to create position";
+    alert(`Error: ${message}`);
+  }
+};
 
   const inputClass = `w-full px-4 py-3 rounded-xl border ${
     isDark ? 'bg-[#0f172a] border-white/10 text-white' : 'bg-slate-50 border-black/10 text-slate-900'

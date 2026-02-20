@@ -90,7 +90,7 @@ const SideBar = ({ isCollapsed, theme, user }) => {
           <div className="w-8 h-8 min-w-8 bg-[#7c3aed] text-white rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/20">
             <Layers size={20} />
           </div>
-          {!isCollapsed && <span className={`logo-text ${styles.logoText}`}>LyticalSMS</span>}
+          {!isCollapsed && <span className={`logo-text ${styles.logoText}`}>HRMS</span>}
         </div>
         {!isCollapsed && (
           <span className="block mt-1 text-[10px] text-purple-500 font-bold tracking-widest uppercase">

@@ -4,6 +4,10 @@ import { User, Lock, Eye, EyeOff } from 'lucide-react'; // Import Lucide icons
 
 const Login = () => {
   const navigate = useNavigate();
+  useEffect(() => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+  }, []);
   
   // --- State ---
   const [email, setEmail] = useState('');
@@ -12,25 +16,9 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // --- Session Check ---
-  useEffect(() => {
-  const token = localStorage.getItem('token');
-  const userStr = localStorage.getItem('user');
 
-  if (token && userStr) {
-    try {
-      const user = JSON.parse(userStr);
-      // Only redirect if we have a valid role
-      if (user?.role === 'Admin') navigate('/admin/dashboard');
-      else if (user?.role === 'Manager') navigate('/manager/dashboard');
-      else if (user?.role === 'Employee') navigate('/employee/dashboard');
-    } catch (e) {
-      // If JSON is corrupted, clear everything
-      localStorage.clear();
-    }
-  }
-}, [navigate]);
 
+  // --- Logic ---
   // --- Logic ---
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -38,7 +26,11 @@ const Login = () => {
     setErrorMsg('');
 
     try {
-      const response = await fetch('http://localhost:3000/api/auth/login', {
+      // 1. Get the Base URL from Vite's environment variables
+      // This defaults to localhost if the variable isn't set (like during local dev)
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -59,7 +51,7 @@ const Login = () => {
       }
     } catch (error) {
       console.error('Login error:', error);
-      setErrorMsg('Network error: Ensure the backend server is running.');
+      setErrorMsg('Connection failed. Please check your internet or try again later.');
     } finally {
       setLoading(false);
     }
@@ -78,19 +70,19 @@ const Login = () => {
           <div className="hidden md:flex w-full md:w-[45%] bg-linear-to-br from-[#6d5dfc] via-[#c850c0] to-[#ff5858] p-6 md:p-10 flex-col items-center justify-center text-white text-center relative">
             <p className="text-xs tracking-widest opacity-80 uppercase mb-8 font-semibold">Welcome To</p>
             <div className="w-20 h-20 bg-black/20 flex items-center justify-center rounded-2xl text-3xl font-bold mb-6">
-              CH
+              HR
             </div>
-            <h2 className="text-sm font-medium mb-1">Supomu Dunkwa - Shama</h2>
-            <p className="text-xs opacity-70">Takoradi, Ghana</p>
+            <h2 className="text-sm font-medium mb-1">Employee Management - System</h2>
+            <p className="text-xs opacity-70">Ethiopia</p>
           </div>
 
           {/* Right side - Login form */}
           <div className="w-full md:w-[55%] p-6 md:p-8 lg:p-12 flex flex-col justify-center bg-[#1b1b1b]">
             <div className="flex items-center gap-3 mb-10">
               <div className="w-9 h-9 bg-[#6d5dfc] rounded-lg flex items-center justify-center text-white font-bold">
-                CH
+                HR
               </div>
-              <span className="text-xl font-medium text-white">LyticalSmS</span>
+              <span className="text-xl font-medium text-white">HRMS</span>
             </div>
 
             {errorMsg && (

@@ -1,109 +1,107 @@
 import React from 'react';
-import { X, ShieldCheck, UserCheck, Target, TrendingUp, Users, Info } from 'lucide-react';
+import { X, ShieldCheck, UserCheck, Building, Target, Briefcase } from 'lucide-react';
 
 const ViewStructure = ({ isOpen, onClose, data, theme = 'dark' }) => {
   if (!isOpen || !data) return null;
   const isDark = theme === 'dark';
 
-  // Specific styles for the Manager's analytical view
-  const styles = {
-    overlay: "fixed inset-0 bg-black/90 backdrop-blur-xl z-[3000] flex items-center justify-center p-4",
-    card: `relative w-full max-w-2xl rounded-[3.5rem] border ${isDark ? 'bg-[#0b1220] border-white/10 shadow-2xl' : 'bg-white border-slate-200 shadow-xl'} overflow-hidden animate-in zoom-in-95 duration-300`,
-    statBox: `p-6 rounded-[2rem] border ${isDark ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-100'}`,
-    label: "text-[10px] font-black uppercase tracking-[0.2em] mb-1"
+  // Helper to resolve display name from the nested employee object
+  const getDisplayName = (user) => {
+    if (!user) return 'N/A';
+    if (user.firstName || user.lastName) {
+      return `${user.firstName || ''} ${user.lastName || ''}`.trim();
+    }
+    return user.name || user.email?.split('@')[0] || 'Unknown User';
   };
 
-  return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.card} onClick={e => e.stopPropagation()}>
-        
-        {/* Background Accent */}
-        <div className="absolute top-0 left-0 w-full h-32 bg-linear-to-b from-[#7c3aed]/10 to-transparent pointer-events-none" />
+  // Extracting data based on your Prisma include structure
+  const employeeName = getDisplayName(data.employee);
+  const jobTitle = data.jobPosition?.title || data.employee?.jobPositionRel?.title || 'Staff Member';
+  const deptName = data.department?.name || data.employee?.departmentRel?.name || 'Unassigned';
+  const supervisorName = data.manager ? getDisplayName(data.manager) : 'Independent (Self-Reporting)';
+  
+  // Initials for avatar placeholder since data.img might not exist in DB
+  const initials = employeeName.split(' ').map(n => n[0]).join('').toUpperCase();
 
-        <div className="p-10 flex flex-col items-center text-center relative z-10">
-          <button onClick={onClose} className="absolute top-0 right-0 p-3 text-slate-500 hover:text-[#7c3aed] transition-colors">
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-3000 flex items-center justify-center p-4">
+      <div className={`w-full max-w-2xl rounded-[3rem] border relative ${isDark ? 'bg-[#0b1220] border-white/10 shadow-2xl shadow-purple-500/10' : 'bg-white border-slate-200 shadow-xl'} overflow-hidden animate-in zoom-in-95 duration-300`}>
+        
+        <div className="p-10 flex flex-col items-center text-center">
+          <button 
+            onClick={onClose} 
+            className={`absolute top-8 right-8 p-3 rounded-full transition-colors ${isDark ? 'text-slate-500 hover:bg-white/10 hover:text-white' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-900'}`}
+          >
             <X size={24}/>
           </button>
           
-          {/* Employee Profile Header */}
-          <div className="relative mb-6">
-            <img src={data.img} className="w-28 h-28 rounded-[2.5rem] border-4 border-[#7c3aed]/20 object-cover shadow-2xl" alt=""/>
-            <div className="absolute -bottom-2 -right-2 bg-emerald-500 p-2 rounded-xl text-white shadow-lg shadow-emerald-500/20">
-              <UserCheck size={16}/>
+          {/* Profile Image / Initials */}
+          {data.employee?.image ? (
+            <img src={data.employee.image} className="w-24 h-24 rounded-4xl border-4 border-[#7c3aed]/20 mb-6 object-cover" alt={employeeName}/>
+          ) : (
+            <div className="w-24 h-24 rounded-4xl bg-linear-to-tr from-[#7c3aed] to-purple-400 flex items-center justify-center text-white text-3xl font-black mb-6 shadow-lg">
+              {initials}
             </div>
-          </div>
+          )}
 
-          <h2 className={`text-3xl font-black tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>{data.emp}</h2>
+          <h2 className={`text-3xl font-black tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>
+            {employeeName}
+          </h2>
+          
           <div className="flex items-center gap-2 mt-2">
-            <span className="bg-[#7c3aed] text-white text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-tighter">
-              {data.pos}
-            </span>
-            <span className={`text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-              Dept: {data.dept}
-            </span>
+            <p className="text-[#7c3aed] font-black text-xs uppercase tracking-widest">{jobTitle}</p>
+            <span className="text-slate-500">•</span>
+            <p className="text-slate-500 font-bold text-xs uppercase tracking-widest">{deptName}</p>
           </div>
 
-          {/* Managerial Analytics Grid */}
-          <div className="grid grid-cols-2 gap-5 w-full mt-10">
-            <div className={styles.statBox}>
-              <div className={`flex items-center gap-2 text-emerald-500 ${styles.label}`}>
-                <ShieldCheck size={14}/>
-                <span>Reports To</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full mt-10">
+            {/* Reports To Box */}
+            <div className={`p-6 rounded-4xl border text-left ${isDark ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-100'}`}>
+              <div className="flex items-center gap-2 text-emerald-500 mb-2">
+                <ShieldCheck size={16}/>
+                <span className="text-[10px] font-black uppercase tracking-widest">Reports To</span>
               </div>
-              <p className={`text-lg font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{data.supervisor}</p>
-              <p className="text-[10px] text-slate-500 font-bold mt-1">Direct Line Manager</p>
+              <p className={`text-lg font-black truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                {supervisorName}
+              </p>
             </div>
 
-            <div className={styles.statBox}>
-              <div className={`flex items-center gap-2 text-blue-500 ${styles.label}`}>
-                <Target size={14}/>
-                <span>Span of Control</span>
+            {/* Department Box */}
+            <div className={`p-6 rounded-4xl border text-left ${isDark ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-100'}`}>
+              <div className="flex items-center gap-2 text-blue-500 mb-2">
+                <Building size={16}/>
+                <span className="text-[10px] font-black uppercase tracking-widest">Organization Unit</span>
               </div>
-              <p className={`text-lg font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>08 Members</p>
-              <p className="text-[10px] text-slate-500 font-bold mt-1">Direct Reports</p>
-            </div>
-          </div>
-
-          {/* Departmental Insight Section */}
-          <div className={`w-full mt-6 p-6 rounded-4xl border border-dashed ${isDark ? 'border-white/10 bg-white/2' : 'border-slate-200 bg-slate-50'}`}>
-            <div className="flex items-center justify-between mb-4">
-               <div className="flex items-center gap-2">
-                 <TrendingUp size={16} className="text-[#7c3aed]"/>
-                 <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Team Productivity Context</span>
-               </div>
-               <Info size={14} className="text-slate-600"/>
-            </div>
-            
-            <div className="flex gap-4">
-              <div className="flex-1 text-left">
-                <p className={`text-xs font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>Internal Seniority</p>
-                <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
-                  <div className="bg-[#7c3aed] w-[75%] h-full rounded-full" />
-                </div>
-              </div>
-              <div className="flex-1 text-left">
-                <p className={`text-xs font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>Approval Rating</p>
-                <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
-                  <div className="bg-emerald-500 w-[92%] h-full rounded-full" />
-                </div>
-              </div>
+              <p className={`text-lg font-black truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                {deptName}
+              </p>
             </div>
           </div>
 
-          {/* Bottom Actions */}
-          <div className="w-full mt-8 pt-8 border-t border-white/5 space-y-4">
-            <div className="flex items-center justify-center gap-6">
-              <div className="flex items-center gap-2">
-                <Users size={14} className="text-[#7c3aed]"/>
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Team Member Since 2022</span>
+          {/* Verification Status */}
+          <div className="w-full mt-10 pt-10 border-t border-white/5 flex flex-col gap-6">
+            <div className="flex justify-between items-center px-4">
+              <div className="flex flex-col items-start">
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Hierarchy Status</span>
+                <span className="text-xs font-bold text-emerald-500 flex items-center gap-1.5">
+                  <UserCheck size={14}/> Verified Line
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Employee ID</span>
+                <p className={`text-xs font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  {/* We look into data.employee.employeeId (the field in your User model)
+                    If that's missing, we fall back to the first 8 chars of the unique ID */}
+                  {data.employee?.employeeId || data.employee?.id?.substring(0, 8).toUpperCase() || 'N/A'}
+                </p>
               </div>
             </div>
-            
+
             <button 
               onClick={onClose} 
-              className="w-full py-5 bg-[#7c3aed] hover:bg-[#6d28d9] text-white rounded-3xl font-black text-xs uppercase tracking-widest shadow-2xl shadow-purple-500/20 transition-all active:scale-95"
+              className="w-full py-5 bg-[#7c3aed] text-white rounded-2xl font-black text-sm shadow-xl shadow-purple-500/20 hover:bg-[#6d28d9] transition-all"
             >
-              Return to Department Map
+              Close Relationship View
             </button>
           </div>
         </div>

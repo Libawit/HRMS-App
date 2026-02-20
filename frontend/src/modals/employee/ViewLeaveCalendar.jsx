@@ -7,9 +7,8 @@ import {
   CheckCircle2, 
   AlertCircle,
   FileText,
-  MapPin,
-  Briefcase,
-  Info
+  Info,
+  History
 } from 'lucide-react';
 
 const ViewLeaveCalendar = ({ isOpen, onClose, theme = 'dark', data }) => {
@@ -18,16 +17,17 @@ const ViewLeaveCalendar = ({ isOpen, onClose, theme = 'dark', data }) => {
   // --- Theme Styles ---
   const isDark = theme === 'dark';
   const styles = {
-    modalOverlay: "fixed inset-0 bg-black/80 backdrop-blur-md z-[2000] flex items-center justify-center p-4",
+    modalOverlay: "fixed inset-0 bg-black/70 backdrop-blur-sm z-[2000] flex items-center justify-center p-4",
     card: isDark 
       ? "bg-[#0b1220] border-white/10 text-[#e5e7eb]" 
       : "bg-white border-slate-200 text-[#1e293b]",
-    sectionHeader: "text-[10px] font-bold uppercase tracking-widest text-[#94a3b8] mb-4 flex items-center gap-2",
+    sectionHeader: "text-[10px] font-black uppercase tracking-[0.15em] text-[#94a3b8] mb-4 flex items-center gap-2",
     infoBox: isDark ? "bg-[#020617] border-white/5" : "bg-slate-50 border-slate-100",
-    label: "text-[10px] uppercase font-bold text-[#94a3b8] mb-1",
-    value: "text-sm font-semibold",
+    label: "text-[10px] font-bold uppercase tracking-wider text-[#94a3b8] mb-1",
+    value: "text-sm font-black",
   };
 
+  // --- Helpers ---
   const getStatusConfig = (status) => {
     switch(status?.toLowerCase()) {
       case 'approved': return { color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', icon: <CheckCircle2 size={14}/> };
@@ -37,104 +37,117 @@ const ViewLeaveCalendar = ({ isOpen, onClose, theme = 'dark', data }) => {
     }
   };
 
+  const formatDate = (dateString) => {
+    if (!dateString) return "N/A";
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  const calculateDuration = (start, end) => {
+    const s = new Date(start);
+    const e = new Date(end);
+    const diffTime = Math.abs(e - s);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; 
+    return diffDays === 1 ? '1 Full Day' : `${diffDays} Days Total`;
+  };
+
   const status = getStatusConfig(data.status);
+  const leaveTypeName = data.leaveType?.name || "General";
+  const accentColor = data.leaveType?.color || '#7c3aed';
 
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
       <div 
-        className={`w-full max-w-lg rounded-4xl border ${styles.card} overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300`}
-        onClick={e => e.stopPropagation()}
+        className={`w-full max-w-md rounded-[2.5rem] border ${styles.card} overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300`}
+        onClick={(e) => e.stopPropagation()}
       >
         
-        {/* Header Background */}
-        <div className="h-28 bg-linear-to-br from-[#7c3aed] to-[#4f46e5] relative flex items-end px-6 pb-4">
+        {/* Decorative Header */}
+        <div 
+          className="h-32 relative flex items-end p-8" 
+          style={{ background: `linear-gradient(135deg, ${accentColor}, #7c3aed)` }}
+        >
           <button 
             onClick={onClose} 
-            className="absolute top-4 right-4 p-2 rounded-full bg-black/20 text-white hover:bg-black/40 transition-colors"
+            className="absolute top-6 right-6 p-2 rounded-full bg-black/20 text-white hover:bg-black/40 transition-all active:scale-90"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
-          <div className="flex items-center gap-2 text-white/80 text-[10px] font-bold uppercase tracking-[0.2em]">
-            <Info size={12} /> Leave Entry Ref: #LV-{data.day}2026
+          
+          <div>
+            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-[10px] font-black uppercase tracking-widest text-white mb-2`}>
+              {status.icon} {data.status}
+            </div>
+            <h3 className="text-2xl font-black text-white tracking-tight">Leave Details</h3>
           </div>
         </div>
 
-        {/* Profile/Status Summary */}
-        <div className="px-8 pb-8 relative">
-          <div className="flex justify-between items-start -mt-8 mb-6">
-            <div className="w-20 h-20 rounded-3xl bg-[#0b1220] p-1.5 shadow-xl">
-              <div className="w-full h-full rounded-2xl bg-linear-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-3xl font-black italic">
-                {data.name?.charAt(0)}
+        <div className="p-8 space-y-6">
+          
+          {/* Main Info Card */}
+          <div className={`p-5 rounded-3xl border ${styles.infoBox} flex items-center justify-between`}>
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg" style={{ backgroundColor: `${accentColor}20`, color: accentColor }}>
+                <Tag size={24} />
+              </div>
+              <div>
+                <div className={styles.label}>Category</div>
+                <div className={styles.value}>{leaveTypeName}</div>
               </div>
             </div>
-            <div className={`mt-10 flex items-center gap-2 px-4 py-2 rounded-2xl border text-[10px] font-black uppercase tracking-tighter ${status.bg} ${status.color} ${status.border}`}>
-              {status.icon} {data.status}
-            </div>
-          </div>
-
-          <div className="mb-8">
-            <h3 className="text-2xl font-black tracking-tight">{data.name}</h3>
-            <div className="flex items-center gap-4 mt-2 text-[#94a3b8]">
-              <div className="flex items-center gap-1.5 text-xs font-medium">
-                <Briefcase size={14} className="text-[#7c3aed]" /> Senior Developer
-              </div>
-              <div className="flex items-center gap-1.5 text-xs font-medium">
-                <MapPin size={14} className="text-[#7c3aed]" /> Engineering
+            <div className="text-right">
+              <div className={styles.label}>Duration</div>
+              <div className="text-sm font-black text-[#7c3aed]">
+                {calculateDuration(data.startDate, data.endDate)}
               </div>
             </div>
           </div>
 
-          {/* Read-Only Details Grid */}
-          <div className="space-y-4">
-            <div className={`p-5 rounded-3xl border ${styles.infoBox} flex items-center justify-between`}>
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-[#7c3aed]/10 text-[#7c3aed] flex items-center justify-center">
-                  <Tag size={20} />
-                </div>
-                <div>
-                  <div className={styles.label}>Category</div>
-                  <div className="text-sm font-bold uppercase tracking-tight">{data.type} Leave</div>
-                </div>
+          {/* Schedule Section */}
+          <div className="space-y-3">
+            <div className={styles.sectionHeader}><Calendar size={12} /> Leave Schedule</div>
+            <div className="grid grid-cols-2 gap-px bg-slate-500/10 rounded-3xl overflow-hidden border border-white/5">
+              <div className={`p-4 ${styles.infoBox} border-none`}>
+                <div className={styles.label}>Start Date</div>
+                <div className="text-xs font-bold">{formatDate(data.startDate)}</div>
               </div>
-              <div className="text-right">
-                <div className={styles.label}>Impact</div>
-                <div className="text-xs font-black text-emerald-500 uppercase italic">Full Day</div>
+              <div className={`p-4 ${styles.infoBox} border-none`}>
+                <div className={styles.label}>End Date</div>
+                <div className="text-xs font-bold">{formatDate(data.endDate)}</div>
               </div>
             </div>
+          </div>
 
-            <div className={`p-5 rounded-3xl border ${styles.infoBox}`}>
-              <div className={styles.sectionHeader}><Calendar size={14} className="text-[#7c3aed]" /> Scheduled Dates</div>
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <div className={styles.label}>Start Date</div>
-                  <div className="font-bold text-sm">Jan {data.day}, 2026</div>
-                </div>
-                <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center">
-                  <div className="w-4 h-px bg-[#94a3b8]/30"></div>
-                </div>
-                <div className="flex-1 text-right">
-                  <div className={styles.label}>End Date</div>
-                  <div className="font-bold text-sm">Jan {data.day}, 2026</div>
-                </div>
-              </div>
-            </div>
-
-            <div className={`p-5 rounded-3xl border ${styles.infoBox} bg-linear-to-br from-transparent to-white/5`}>
-              <div className={styles.sectionHeader}><FileText size={14} className="text-[#7c3aed]" /> My Comments</div>
-              <p className="text-sm text-[#94a3b8] leading-relaxed italic font-medium">
-                "I have logged this {data.type.toLowerCase()} leave for my personal commitments. The request has been synchronized with the team's capacity planner."
+          {/* Reason Section */}
+          <div className="space-y-3">
+            <div className={styles.sectionHeader}><FileText size={12} /> My Request Note</div>
+            <div className={`p-5 rounded-3xl border border-dashed ${styles.border} ${isDark ? 'bg-white/2' : 'bg-slate-50'}`}>
+              <p className="text-xs text-[#94a3b8] leading-relaxed italic">
+                "{data.reason || `No specific comments provided for this ${leaveTypeName.toLowerCase()} leave request.`}"
               </p>
             </div>
           </div>
+
+          {/* System Info */}
+          <div className="flex items-start gap-3 p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10">
+            <Info size={16} className="text-blue-500 mt-0.5" />
+            <p className="text-[10px] leading-relaxed text-[#94a3b8]">
+              This record is officially <strong>{data.status.toLowerCase()}</strong>. Any changes to approved leaves must be handled via the HR helpdesk.
+            </p>
+          </div>
         </div>
 
-        {/* Footer */}
-        <div className={`p-6 border-t border-inherit ${isDark ? 'bg-[#020617]/50' : 'bg-slate-50'}`}>
+        {/* Action Footer */}
+        <div className={`p-8 pt-0 flex gap-3`}>
           <button 
             onClick={onClose}
-            className="w-full bg-[#7c3aed] text-white py-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] hover:bg-[#6d28d9] shadow-xl shadow-purple-500/20 active:scale-[0.98] transition-all"
+            className="w-full text-white py-4 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-purple-500/20 active:scale-[0.98] transition-all hover:brightness-110"
+            style={{ backgroundColor: accentColor }}
           >
-            Back to My Calendar
+            Got it
           </button>
         </div>
       </div>

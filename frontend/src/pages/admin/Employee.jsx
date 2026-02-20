@@ -40,24 +40,37 @@ const EmployeeDirectory = () => {
   const fetchData = async () => {
   setIsLoading(true);
   try {
-    const [empRes, deptRes] = await Promise.all([
-      fetch('http://localhost:3000/api/auth/employees'),
-      fetch('http://localhost:3000/api/auth/departments')
-    ]);
+    const token = localStorage.getItem('token'); // Get the token you saved at login
+
+    const requestOptions = {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}` // This matches your middleware's split(' ')[1]
+      }
+    };
+
+    // Use these options for both calls
+    const empRes = await fetch('http://localhost:5000/api/auth/employees', requestOptions);
+    const deptRes = await fetch('http://localhost:5000/api/auth/departments', requestOptions);
 
     const empData = await empRes.json();
     const deptData = await deptRes.json();
 
-    // --- THE FIX: FLATTEN THE DATA ---
-    const mappedEmployees = empData.map(emp => ({
-      ...emp,
-      // If the relation exists, use the name. If not, use the legacy field.
-      department: emp.departmentRel?.name || emp.department || "Not Specified",
-      jobPosition: emp.jobPositionRel?.title || emp.jobPosition || "Not Specified"
-    }));
+    // Safety: Only map if empData is an array (prevents the .map error)
+    if (Array.isArray(empData)) {
+      const mappedEmployees = empData.map(emp => ({
+        ...emp,
+        department: emp.departmentRel?.name || emp.department || "Not Specified",
+        jobPosition: emp.jobPositionRel?.title || emp.jobPosition || "Not Specified"
+      }));
+      setEmployees(mappedEmployees);
+    }
+    
+    if (Array.isArray(deptData)) {
+      setDepartments(deptData);
+    }
 
-    setEmployees(mappedEmployees);
-    setDepartments(deptData);
   } catch (err) {
     console.error("Fetch Error:", err);
   } finally {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, FileText, FolderTree, CloudUpload, Loader2 } from 'lucide-react';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 
 const EditDocuments = ({ isOpen, onClose, onSave, fileData, theme = 'dark' }) => {
   const [formData, setFormData] = useState({ name: '', cat: 'contracts' });
@@ -40,7 +40,7 @@ const EditDocuments = ({ isOpen, onClose, onSave, fileData, theme = 'dark' }) =>
       data.append('category', formData.cat);
       if (selectedFile) data.append('file', selectedFile);
 
-      const response = await axios.patch(`http://localhost:3000/api/documents/${fileData.id}`, data);
+      const response = await axios.patch(`http://localhost:5000/api/documents/${fileData.id}`, data);
       
       onSave(response.data); // Update the table in parent
       onClose();

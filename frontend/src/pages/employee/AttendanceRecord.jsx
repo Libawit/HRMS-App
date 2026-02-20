@@ -1,40 +1,28 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
-  Eye, 
-  Clock, 
-  AlertTriangle,
-  FileDown,
-  Calendar as CalendarIcon,
-  UserCheck,
-  ChevronLeft,
-  ChevronRight,
-  Lock,
-  RotateCcw
+  Eye, Clock, AlertTriangle, FileDown,
+  Calendar as CalendarIcon, UserCheck,
+  ChevronLeft, ChevronRight, Lock, RotateCcw, Loader2
 } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
+import axios from '../../utils/axiosConfig';
+import { toast } from 'react-hot-toast';
 
 // Only View Modal is imported for Employee access
 import ViewAttendanceRecordModal from '../../modals/employee/ViewAttendanceRecord';
 
 const AttendanceRecord = () => {
-  // --- Theme Logic via useOutletContext ---
-  const { theme } = useOutletContext();
+  const { theme, user } = useOutletContext();
   const isDark = theme === 'dark';
 
-  /**
-   * Helper: Get YYYY-MM-DD string based on local time
-   */
   const getTodayStr = () => {
     const today = new Date();
-    const offset = today.getTimezoneOffset();
-    const localDate = new Date(today.getTime() - (offset * 60 * 1000));
-    return localDate.toISOString().split('T')[0];
+    return today.toISOString().split('T')[0];
   };
 
-  // --- Current User Identity (Strict Privacy) ---
-  const currentUser = { name: "Jessica Taylor" }; 
-
   // --- State ---
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [dateFilter, setDateFilter] = useState(getTodayStr()); 
   const [currentPage, setCurrentPage] = useState(1);
@@ -44,23 +32,66 @@ const AttendanceRecord = () => {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
 
-  /**
-   * FORCE RESET ON LOAD
-   */
-  useEffect(() => {
-    setDateFilter(getTodayStr());
+  // --- Fetch Data from Backend ---
+  const fetchMyHistory = useCallback(async () => {
+    try {
+      setLoading(true);
+      // Calls your GET /api/attendance/my-history endpoint
+      const response = await axios.get("/attendance/my-history");
+      
+      // Transform Prisma dates for the table
+      const formatted = response.data.map(rec => ({
+        ...rec,
+        // Format ISO date to YYYY-MM-DD for the filter comparison
+        dateStr: new Date(rec.date).toISOString().split('T')[0],
+        displayDate: new Date(rec.date).toLocaleDateString('en-GB', { 
+          day: '2-digit', month: 'short', year: 'numeric' 
+        }),
+        checkInTime: rec.checkIn ? new Date(rec.checkIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--',
+        checkOutTime: rec.checkOut ? new Date(rec.checkOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--',
+      }));
+
+      setRecords(formatted);
+    } catch (error) {
+      console.error("Fetch Error:", error);
+      toast.error("Failed to load attendance history.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // --- Mock Data (Contains multiple employees to test privacy) ---
-  const [records] = useState([
-    { id: 10, name: "Jessica Taylor", date: "2026-01-21", checkIn: "08:45 AM", checkOut: "05:15 PM", status: "On Time", workHours: "8h 30m" },
-    { id: 1, name: "Jessica Taylor", date: "2026-01-20", checkIn: "09:10 AM", checkOut: "05:05 PM", status: "Late", workHours: "7h 55m" },
-    { id: 4, name: "Jessica Taylor", date: "2026-01-15", checkIn: "08:45 AM", checkOut: "04:30 PM", status: "On Time", workHours: "7h 45m" }, 
-    // Data for other employees (Should be filtered out)
-    { id: 99, name: "John Doe", date: "2026-01-21", checkIn: "09:00 AM", checkOut: "05:00 PM", status: "On Time", workHours: "8h 00m" },
-  ]);
+  useEffect(() => {
+    fetchMyHistory();
+  }, [fetchMyHistory]);
 
-  // --- Theme Styles ---
+  // --- Filtering Logic ---
+  const filteredRecords = useMemo(() => {
+    return records.filter(rec => {
+      const matchesStatus = statusFilter === 'All Status' || rec.status === statusFilter;
+      const matchesDate = rec.dateStr === dateFilter;
+      return matchesStatus && matchesDate;
+    });
+  }, [statusFilter, dateFilter, records]);
+
+  // --- Stats Calculation (Based on all fetched records, not just filtered ones) ---
+  const stats = useMemo(() => {
+    const thisMonth = new Date().getMonth();
+    const monthlyRecords = records.filter(r => new Date(r.date).getMonth() === thisMonth);
+    
+    return {
+      present: monthlyRecords.filter(r => ['On Time', 'Late', 'Half Day'].includes(r.status)).length,
+      late: monthlyRecords.filter(r => r.status === 'Late').length,
+      leaves: 14 - monthlyRecords.filter(r => r.status === 'Absent').length // Example logic
+    };
+  }, [records]);
+
+  // --- Navigation ---
+  const shiftDate = (days) => {
+    const current = new Date(dateFilter);
+    current.setDate(current.getDate() + days);
+    setDateFilter(current.toISOString().split('T')[0]);
+  };
+
   const styles = {
     bgBody: isDark ? 'bg-[#020617]' : 'bg-[#f8fafc]',
     bgCard: isDark ? 'bg-[#0b1220]' : 'bg-white shadow-sm',
@@ -71,36 +102,13 @@ const AttendanceRecord = () => {
     tableRow: isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50',
   };
 
-  // --- Date Navigation Logic ---
-  const shiftDate = (days) => {
-    const current = new Date(dateFilter);
-    current.setDate(current.getDate() + days);
-    const newDateStr = current.toISOString().split('T')[0];
-    setDateFilter(newDateStr);
-  };
-
-  // --- Filtering Logic: Only Jessica Taylor sees Jessica Taylor ---
-  const filteredRecords = useMemo(() => {
-    return records.filter(rec => {
-      const isMe = rec.name === currentUser.name;
-      const matchesStatus = statusFilter === 'All Status' || rec.status === statusFilter;
-      const matchesDate = rec.date === dateFilter;
-      return isMe && matchesStatus && matchesDate;
-    });
-  }, [statusFilter, dateFilter, records, currentUser.name]);
-
-  // --- Pagination Logic ---
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredRecords.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
-
   const getStatusBadge = (status) => {
     const base = "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border ";
     switch(status) {
       case 'On Time': return base + "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
       case 'Late': return base + "bg-amber-500/10 text-amber-500 border-amber-500/20";
       case 'Absent': return base + "bg-red-500/10 text-red-500 border-red-500/20";
+      case 'Half Day': return base + "bg-blue-500/10 text-blue-500 border-blue-500/20";
       default: return base + "bg-slate-500/10 text-slate-500 border-slate-500/20";
     }
   };
@@ -116,125 +124,102 @@ const AttendanceRecord = () => {
           <h1 className={`text-3xl font-black tracking-tight ${styles.textMain}`}>
             {dateFilter === getTodayStr() ? "Today's Attendance" : "Attendance Record"}
           </h1>
+          <p className={`${styles.textMuted} text-xs mt-1`}>Signed in as <span className="text-[#7c3aed] font-bold">{user?.firstName} {user?.lastName}</span></p>
         </div>
         <div className="flex gap-3">
           <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${styles.border} ${styles.textMuted}`}>
-            <Lock size={14} /> <span className="text-[10px] font-bold uppercase">View Only</span>
+            <Lock size={14} /> <span className="text-[10px] font-bold uppercase tracking-tighter">Secure View</span>
           </div>
-          <button className={`flex items-center gap-2 px-5 py-2.5 rounded-xl border ${styles.border} ${styles.textMain} hover:bg-white/5 transition-all text-sm font-bold`}>
-            <FileDown size={18} /> Download PDF
-          </button>
         </div>
       </div>
 
       {/* Stats Section */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard icon={<UserCheck />} label="Days Present" value="22" sub="This Month" color="emerald" theme={theme} />
-        <StatCard icon={<AlertTriangle />} label="Late Entries" value="02" sub="Check Policy" color="amber" theme={theme} />
-        <StatCard icon={<Clock />} label="Average In" value="08:52" sub="On Time" color="purple" theme={theme} />
-        <StatCard icon={<CalendarIcon />} label="Leaves" value="14" sub="Remaining" color="red" theme={theme} />
+        <StatCard icon={<UserCheck />} label="Days Present" value={stats.present} sub="This Month" color="emerald" theme={theme} />
+        <StatCard icon={<AlertTriangle />} label="Late Entries" value={stats.late} sub="Check Policy" color="amber" theme={theme} />
+        <StatCard icon={<Clock />} label="Hours Logged" value={records.length > 0 ? records[0].workHours : '0'} sub="Last Session" color="purple" theme={theme} />
+        <StatCard icon={<CalendarIcon />} label="Leaves" value={stats.leaves} sub="Remaining" color="red" theme={theme} />
       </div>
 
       {/* Main Table Card */}
       <div className={`${styles.bgCard} border ${styles.border} rounded-2xl overflow-hidden shadow-sm`}>
         <div className={`p-5 border-b ${styles.border} flex flex-col xl:flex-row gap-4 justify-between items-center`}>
-          
           <div className="flex flex-col md:flex-row items-center gap-4">
-            <div className="flex items-center gap-2">
-               {/* Date Navigator */}
-               <div className={`flex items-center ${styles.bgInput} border ${styles.border} rounded-xl overflow-hidden`}>
-                  <button 
-                    onClick={() => shiftDate(-1)} 
-                    className={`p-2.5 ${styles.textMuted} hover:text-[#7c3aed] transition-colors border-r ${styles.border}`}
-                  >
-                    <ChevronLeft size={18} />
-                  </button>
-                  <input 
-                    type="date"
-                    className={`bg-transparent ${styles.textMain} px-4 py-2 text-sm outline-none cursor-pointer font-bold`}
-                    value={dateFilter}
-                    onChange={(e) => setDateFilter(e.target.value)}
-                  />
-                  <button 
-                    onClick={() => shiftDate(1)} 
-                    className={`p-2.5 ${styles.textMuted} hover:text-[#7c3aed] transition-colors border-l ${styles.border}`}
-                  >
-                    <ChevronRight size={18} />
-                  </button>
-               </div>
-
-               {/* Reset Button */}
-               <button 
-                onClick={() => setDateFilter(getTodayStr())}
-                className={`p-2.5 rounded-xl border ${styles.border} ${styles.textMuted} hover:text-[#7c3aed] hover:border-[#7c3aed] transition-all`}
-                title="Go to Today"
-               >
-                 <RotateCcw size={18} />
-               </button>
-            </div>
+             <div className={`flex items-center ${styles.bgInput} border ${styles.border} rounded-xl overflow-hidden`}>
+                <button onClick={() => shiftDate(-1)} className={`p-2.5 ${styles.textMuted} hover:text-[#7c3aed] transition-colors border-r ${styles.border}`}><ChevronLeft size={18} /></button>
+                <input type="date" className={`bg-transparent ${styles.textMain} px-4 py-2 text-sm outline-none cursor-pointer font-bold`} value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
+                <button onClick={() => shiftDate(1)} className={`p-2.5 ${styles.textMuted} hover:text-[#7c3aed] transition-colors border-l ${styles.border}`}><ChevronRight size={18} /></button>
+             </div>
+             <button onClick={() => setDateFilter(getTodayStr())} className={`p-2.5 rounded-xl border ${styles.border} ${styles.textMuted} hover:text-[#7c3aed] transition-all`} title="Go to Today"><RotateCcw size={18} /></button>
           </div>
           
-          <select 
-            className={`${styles.bgInput} border ${styles.border} ${styles.textMain} text-xs font-bold rounded-xl px-4 py-2.5 outline-none cursor-pointer`}
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
+          <select className={`${styles.bgInput} border ${styles.border} ${styles.textMain} text-xs font-bold rounded-xl px-4 py-2.5 outline-none cursor-pointer`} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option>All Status</option>
             <option>On Time</option>
             <option>Late</option>
             <option>Absent</option>
+            <option>Half Day</option>
           </select>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className={`text-[10px] ${styles.textMuted} uppercase tracking-widest font-black border-b ${styles.border} bg-black/5`}>
-                <th className="p-5">Date</th>
-                <th className="p-5">Check In</th>
-                <th className="p-5">Check Out</th>
-                <th className="p-5">Work Hours</th>
-                <th className="p-5">Status</th>
-                <th className="p-5 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className={`divide-y ${styles.border}`}>
-              {currentItems.length > 0 ? currentItems.map((rec) => (
-                <tr key={rec.id} className={styles.tableRow}>
-                  <td className={`p-5 font-bold ${styles.textMain}`}>{rec.date}</td>
-                  <td className={`p-5 font-mono text-xs ${styles.textMain}`}>{rec.checkIn}</td>
-                  <td className={`p-5 font-mono text-xs ${styles.textMain}`}>{rec.checkOut}</td>
-                  <td className={`p-5 text-xs ${styles.textMuted}`}>{rec.workHours}</td>
-                  <td className="p-5">
-                    <span className={getStatusBadge(rec.status)}>{rec.status}</span>
-                  </td>
-                  <td className="p-5 text-right">
-                    <button 
-                      onClick={() => { setSelectedRecord(rec); setIsViewModalOpen(true); }} 
-                      className="p-2 rounded-lg bg-[#7c3aed]/5 text-[#7c3aed] hover:bg-[#7c3aed] hover:text-white transition-all"
-                    >
-                      <Eye size={16} />
-                    </button>
-                  </td>
+          {loading ? (
+            <div className="p-20 flex flex-col items-center justify-center gap-4">
+              <Loader2 className="animate-spin text-[#7c3aed]" size={32} />
+              <p className={`text-xs font-bold uppercase tracking-widest ${styles.textMuted}`}>Synchronizing Logs...</p>
+            </div>
+          ) : (
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className={`text-[10px] ${styles.textMuted} uppercase tracking-widest font-black border-b ${styles.border} bg-black/5`}>
+                  <th className="p-5">Date</th>
+                  <th className="p-5">Check In</th>
+                  <th className="p-5">Check Out</th>
+                  <th className="p-5">Work Hours</th>
+                  <th className="p-5">Status</th>
+                  <th className="p-5 text-right">Action</th>
                 </tr>
-              )) : (
-                <tr>
-                  <td colSpan="6" className={`p-20 text-center ${styles.textMuted} italic`}>
-                    No logs found for {dateFilter === getTodayStr() ? "Today" : dateFilter}.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className={`divide-y ${styles.border}`}>
+                {filteredRecords.length > 0 ? filteredRecords.map((rec) => (
+                  <tr key={rec.id} className={styles.tableRow}>
+                    <td className={`p-5 font-bold ${styles.textMain}`}>{rec.displayDate}</td>
+                    <td className={`p-5 font-mono text-xs ${styles.textMain}`}>{rec.checkInTime}</td>
+                    <td className={`p-5 font-mono text-xs ${styles.textMain}`}>{rec.checkOutTime}</td>
+                    <td className={`p-5 text-xs ${styles.textMuted}`}>{rec.workHours}h</td>
+                    <td className="p-5">
+                      <span className={getStatusBadge(rec.status)}>{rec.status}</span>
+                    </td>
+                    <td className="p-5 text-right">
+                      <button 
+                        onClick={() => { setSelectedRecord(rec); setIsViewModalOpen(true); }} 
+                        className="p-2 rounded-lg bg-[#7c3aed]/5 text-[#7c3aed] hover:bg-[#7c3aed] hover:text-white transition-all"
+                      >
+                        <Eye size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan="6" className={`p-20 text-center ${styles.textMuted} italic`}>
+                      No logs found for {dateFilter === getTodayStr() ? "Today" : dateFilter}.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
-      <ViewAttendanceRecordModal 
-        isOpen={isViewModalOpen} 
-        onClose={() => setIsViewModalOpen(false)} 
-        theme={theme} 
-        data={selectedRecord} 
-      />
+      {selectedRecord && (
+        <ViewAttendanceRecordModal 
+          isOpen={isViewModalOpen} 
+          onClose={() => setIsViewModalOpen(false)} 
+          theme={theme} 
+          data={selectedRecord} 
+        />
+      )}
     </main>
   );
 };

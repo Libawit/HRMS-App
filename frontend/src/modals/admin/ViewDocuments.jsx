@@ -195,7 +195,7 @@ const ViewDocuments = ({ isOpen, onClose, fileData, onDelete, theme = 'dark' }) 
           
           <div className="p-4 text-center border-t border-white/5">
             <p className="text-[9px] text-[#94a3b8] font-medium tracking-[0.2em] uppercase">
-              End-to-End Encrypted Session • LyticalSMS Vault v2.0
+              End-to-End Encrypted Session • HRMS Vault v2.0
             </p>
           </div>
         </div>

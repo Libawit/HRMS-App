@@ -1,42 +1,31 @@
 const prisma = require('../config/db');
 
 // --- GET ALL DEPARTMENTS (Hierarchical Data) ---
+
 exports.getAllDepartments = async (req, res) => {
   try {
+    const userId = req.user.id;
+    const userRole = req.user.role ? req.user.role.toLowerCase() : '';
+    const userDeptId = req.user.departmentId;
+
+    let whereClause = {};
+
+    if (userRole !== 'admin' && userRole !== 'hr manager') {
+      if (!userDeptId) return res.json([]);
+      whereClause = { id: userDeptId };
+    }
+
     const depts = await prisma.department.findMany({
+      where: whereClause,
       include: {
-        // Get the parent's name for the table view
-        parent: { 
-          select: { id: true, name: true } 
-        },
-        // Get immediate children for tree traversal
-        subDepts: {
-          select: { id: true, name: true, manager: true }
-        },
-        // Get users assigned to this specific department
-        users: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            profileImage: true,
-            // Deep link to get their job title
-            jobPositionRel: { 
-              select: { title: true } 
-            }
-          }
-        },
-        // Meta-data for the UI count badges
-        _count: {
-          select: { users: true }
-        }
-      },
-      orderBy: { name: 'asc' }
+        parent: { select: { name: true } },
+        _count: { select: { users: true } }
+      }
     });
+
     res.json(depts);
   } catch (error) {
-    console.error("Fetch Structure Error:", error);
-    res.status(500).json({ message: "Failed to fetch organizational structure" });
+    res.status(500).json({ message: "Server Error" });
   }
 };
 
@@ -112,5 +101,39 @@ exports.deleteDepartment = async (req, res) => {
     res.status(500).json({ 
       message: "Cannot delete department while it contains employees. Reassign them first." 
     });
+  }
+};
+
+exports.getManagerDepartment = async (req, res) => {
+  try {
+    // 1. req.user comes from 'protect' middleware
+    const userRole = req.user.role.toLowerCase();
+    const userDeptId = req.user.departmentId;
+
+    // 2. If Admin, show everything
+    if (userRole === 'admin') {
+      const allDepts = await prisma.department.findMany({
+        include: { parent: true, _count: { select: { users: true } } }
+      });
+      return res.json(allDepts);
+    }
+
+    // 3. If Manager, ONLY show their assigned department
+    if (!userDeptId) {
+      return res.status(404).json({ message: "No department assigned to this manager" });
+    }
+
+    const myDept = await prisma.department.findMany({
+      where: { id: userDeptId }, // This is the filter!
+      include: {
+        parent: { select: { name: true } },
+        _count: { select: { users: true } }
+      }
+    });
+
+    res.json(myDept);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server Error" });
   }
 };

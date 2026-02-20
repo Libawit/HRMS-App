@@ -21,7 +21,11 @@ model User {
   departmentRel Department? @relation(fields: [departmentId], references: [id])
 
   jobPositionId  String?
-  jobPositionRel JobPosition? @relation("UserToJobPosition", fields: [jobPositionId], references: [id])
+  jobPositionRel JobPosition? @relation("UserToJobPosition", fields: [jobPositionId], references: [id]) 
+
+  // Relationship back-references for the Structure table
+  structureAsEmployee OrganizationStructure?  @relation("UserAsEmployee")
+  managedTeam         OrganizationStructure[] @relation("UserAsManager")
 
   // Leave Management Relationships
   documents     Document[]
@@ -56,6 +60,7 @@ model User {
   telegramVerified Boolean   @default(false)
   otpCode          String?   
   otpExpires       DateTime?
+  
 }
 
 // Add this to your schema.prisma
@@ -92,7 +97,9 @@ model Department {
   subDepts Department[] @relation("DeptHierarchy")
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @updatedAt 
+
+  structures OrganizationStructure[]
 }
 
 model JobPosition {
@@ -109,9 +116,38 @@ model JobPosition {
 
   // FIX: This is the "opposite relation field" Prisma is looking for
   users        User[]      @relation("UserToJobPosition")
+  structures   OrganizationStructure[]
 
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
+}
+
+model OrganizationStructure {
+  id           String   @id @default(uuid())
+  
+  // The Employee (The person holding this position)
+  employeeId   String   @unique
+  employee     User     @relation("UserAsEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  // The Manager (Points to a User who holds a manager role)
+  managerId    String?
+  manager      User?    @relation("UserAsManager", fields: [managerId], references: [id], onDelete: SetNull)
+
+  // The Department
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  // The Job Position
+  jobPositionId String?
+  jobPosition   JobPosition? @relation(fields: [jobPositionId], references: [id], onDelete: SetNull)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([managerId])
+  @@index([departmentId])
+  @@index([jobPositionId])
 }
 
 model LeaveType {

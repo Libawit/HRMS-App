@@ -8,25 +8,31 @@ import {
   UserCircle, 
   ChevronDown,
   ClipboardList,
-  Layers,
-  History,
-  Clock
+  Layers
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
-const SideBar = ({ isCollapsed, theme }) => {
+const SideBar = ({ isCollapsed, theme, user }) => {
   const [openMenus, setOpenMenus] = useState({});
   const location = useLocation();
 
   const toggleMenu = (menu) => {
     if (isCollapsed) return; 
-    setOpenMenus(prev => {
-        const isOpen = prev[menu];
-        return { [menu]: !isOpen };
-    });
+    setOpenMenus(prev => ({
+        ...prev,
+        [menu]: !prev[menu]
+    }));
   };
 
-  // Updated Menu Items specifically for the Employee role
+  // Helper to get initials from real name
+  const getInitials = () => {
+    if (!user?.firstName && !user?.lastName) return "ST";
+    const first = user.firstName?.charAt(0) || '';
+    const last = user.lastName?.charAt(0) || '';
+    return (first + last).toUpperCase();
+  };
+
+  // Menu Items for the Employee role
   const menuItems = [
     { name: 'Dashboard', icon: <LayoutDashboard size={18}/>, path: '/employee/dashboard' },
     { 
@@ -92,7 +98,7 @@ const SideBar = ({ isCollapsed, theme }) => {
           <div className="w-8 h-8 min-w-8 bg-[#7c3aed] text-white rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/20">
             <Layers size={20} />
           </div>
-          {!isCollapsed && <span className={`logo-text tracking-tighter ${styles.logoText}`}>LyticalSMS</span>}
+          {!isCollapsed && <span className={`logo-text tracking-tighter ${styles.logoText}`}>HRMS</span>}
         </div>
         {!isCollapsed && (
           <span className="block mt-1 text-[9px] text-[#94a3b8] font-black tracking-[0.2em] uppercase">
@@ -168,13 +174,26 @@ const SideBar = ({ isCollapsed, theme }) => {
 
       {/* User Section */}
       <div className={`p-4 border-t flex items-center gap-3 overflow-hidden shrink-0 ${styles.userSection}`}>
-        <div className="w-10 h-10 min-w-10 rounded-2xl bg-[#7c3aed] flex items-center justify-center font-black text-white shrink-0 shadow-lg shadow-purple-500/20">
-          AT
+        <div className="w-10 h-10 min-w-10 rounded-2xl bg-[#7c3aed] overflow-hidden flex items-center justify-center font-black text-white shrink-0 shadow-lg shadow-purple-500/20">
+          {user?.profileImage ? (
+             <img 
+               src={user.profileImage} 
+               alt="Avatar" 
+               className="w-full h-full object-cover"
+             />
+          ) : (
+            getInitials()
+          )}
         </div>
+        
         {!isCollapsed && (
           <div className="user-info truncate">
-            <p className={`text-[13px] font-black truncate tracking-tight ${styles.logoText}`}>Alex Thompson</p>
-            <p className="text-[10px] text-[#94a3b8] font-bold uppercase tracking-widest">IT Specialist</p>
+            <p className={`text-[13px] font-black truncate tracking-tight ${styles.logoText}`}>
+              {user ? `${user.firstName} ${user.lastName}` : 'Loading...'}
+            </p>
+            <p className="text-[10px] text-[#94a3b8] font-bold uppercase tracking-widest truncate">
+              {user?.jobPosition || 'Staff Member'}
+            </p>
           </div>
         )}
       </div>

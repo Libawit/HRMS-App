@@ -1,21 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Plus, 
-  Search, 
-  Eye, 
-  Edit, 
-  Trash2, 
-  Clock, 
-  CheckCircle2, 
-  AlertTriangle,
-  FileDown,
-  Calendar as CalendarIcon,
-  UserCheck,
-  ChevronLeft,
-  ChevronRight,
-  ShieldCheck
+  Plus, Search, Eye, Edit, Trash2, 
+  Clock, AlertTriangle, FileDown,
+  Calendar as CalendarIcon, UserCheck,
+  ChevronLeft, ChevronRight, Loader2,
+  Filter, ChevronDown, CheckCircle2, ShieldCheck
 } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
+import axios from '../../utils/axiosConfig';
 
 // External Modals
 import AddAttendanceRecordModal from '../../modals/manager/AddAttendanceRecord';
@@ -23,17 +15,18 @@ import EditAttendanceRecordModal from '../../modals/manager/EditAttendanceRecord
 import ViewAttendanceRecordModal from '../../modals/manager/ViewAttendanceRecord';
 
 const AttendanceRecord = () => {
-  // --- Theme Logic: Sync with the global layout theme ---
-  const { theme } = useOutletContext();
+  const { theme, user } = useOutletContext();
   const isDark = theme === 'dark';
 
-  // --- Manager Context ---
-  const managerDept = "Engineering"; 
-
   // --- State ---
+  const [records, setRecords] = useState([]);
+  const [stats, setStats] = useState({ presentToday: 0, lateEntries: 0, totalAbsent: 0, avgWorkDay: '0h' });
+  const [loading, setLoading] = useState(true);
+  const [cleaning, setCleaning] = useState(false); // Cleanup loading state
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All Status');
-  const getTodayStr = () => new Date().toISOString().split('T')[0];
+  
+  const getTodayStr = () => new Date().toLocaleDateString('en-CA');
   const [dateFilter, setDateFilter] = useState(getTodayStr()); 
   
   const [currentPage, setCurrentPage] = useState(1);
@@ -45,269 +38,340 @@ const AttendanceRecord = () => {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
 
-  // --- Mock Data ---
-  const [records, setRecords] = useState([
-    { id: 1, name: "Jessica Taylor", dept: "Engineering", date: "2026-01-16", checkIn: "08:55 AM", checkOut: "05:05 PM", status: "On Time", workHours: "8h 10m" },
-    { id: 2, name: "Michael Chen", dept: "Engineering", date: "2026-01-16", checkIn: "09:25 AM", checkOut: "05:15 PM", status: "Late", workHours: "7h 50m" },
-    { id: 3, name: "Sarah Johnson", dept: "HR", date: "2026-01-16", checkIn: "-", checkOut: "-", status: "Absent", workHours: "0h" },
-    { id: 4, name: "David Wilson", dept: "Engineering", date: "2026-01-15", checkIn: "08:45 AM", checkOut: "04:30 PM", status: "On Time", workHours: "7h 45m" }, 
-    { id: 5, name: "Emma Brown", dept: "Marketing", date: "2026-01-16", checkIn: "09:05 AM", checkOut: "05:30 PM", status: "Late", workHours: "8h 25m" },
-    { id: 6, name: "Chris Evans", dept: "Engineering", date: "2026-01-16", checkIn: "08:30 AM", checkOut: "05:00 PM", status: "On Time", workHours: "8h 30m" },
-  ]);
+  // --- Pagination Logic ---
+  const totalPages = Math.ceil(records.length / itemsPerPage) || 1;
+  const currentItems = records.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  // --- Handlers ---
-  const handleDelete = (id) => {
-    if(window.confirm("Are you sure you want to delete this record? This action is permanent.")) {
-        setRecords(prev => prev.filter(r => r.id !== id));
-    }
+  // --- Helpers ---
+  const formatWorkHours = (hours) => {
+    if (!hours || hours === 0) return '0h';
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
   };
 
   const shiftDate = (days) => {
-    const current = new Date(dateFilter || getTodayStr());
+    const current = new Date(dateFilter);
     current.setDate(current.getDate() + days);
-    setDateFilter(current.toISOString().split('T')[0]);
-  };
-
-  // --- Scoped Filtering Logic ---
-  const filteredRecords = useMemo(() => {
+    setDateFilter(current.toLocaleDateString('en-CA'));
     setCurrentPage(1);
-    return records.filter(rec => {
-      const isMyDept = rec.dept === managerDept;
-      const matchesSearch = rec.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = statusFilter === 'All Status' || rec.status === statusFilter;
-      const matchesDate = !dateFilter || rec.date === dateFilter;
-      return isMyDept && matchesSearch && matchesStatus && matchesDate;
-    });
-  }, [searchTerm, statusFilter, dateFilter, records, managerDept]);
-
-  // --- Pagination ---
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredRecords.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
-
-  // --- Theme Styles ---
-  const styles = {
-    bgBody: isDark ? 'bg-[#020617]' : 'bg-[#f8fafc]',
-    bgCard: isDark ? 'bg-[#0b1220]' : 'bg-white shadow-sm',
-    bgInput: isDark ? 'bg-[#0f1623]' : 'bg-[#f1f5f9]',
-    border: isDark ? 'border-white/10' : 'border-slate-200',
-    textMain: isDark ? 'text-[#e5e7eb]' : 'text-[#1e293b]',
-    textMuted: isDark ? 'text-[#94a3b8]' : 'text-[#64748b]',
-    tableRow: isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50',
   };
+
+  const getStatusBadge = (status) => {
+    const base = "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border shadow-sm ";
+    switch(status) {
+      case 'On Time': return base + "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
+      case 'Late': return base + "bg-amber-500/10 text-amber-500 border-amber-500/20";
+      case 'Half Day': return base + "bg-blue-500/10 text-blue-500 border-blue-500/20";
+      case 'Absent': return base + "bg-red-500/10 text-red-500 border-red-500/20";
+      default: return base + "bg-slate-500/10 text-slate-500 border-slate-500/20";
+    }
+  };
+
+  // --- Data Fetching ---
+  const fetchAttendance = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get('/attendance', {
+        params: { 
+          date: dateFilter, 
+          status: statusFilter === 'All Status' ? '' : statusFilter, 
+          search: searchTerm 
+        }
+      });
+      setRecords(response.data.records || []);
+      setStats(response.data.stats || { presentToday: 0, lateEntries: 0, totalAbsent: 0, avgWorkDay: '0h' });
+    } catch (error) {
+      console.error("Error fetching attendance:", error);
+      if (error.response?.status === 403) {
+        alert("Access Denied: Your account doesn't have manager/admin permissions.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAttendance();
+  }, [dateFilter, statusFilter, searchTerm]);
+
+  // --- Handlers ---
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this record permanently?")) return;
+    try {
+      await axios.delete(`/attendance/${id}`);
+      fetchAttendance();
+    } catch (error) {
+      alert("Failed to delete record. You may not have permission.");
+    }
+  };
+
+  const handleCleanup = async () => {
+    const deptId = user?.departmentId || user?.departmentRel?.id;
+    const deptName = user?.departmentRel?.name || "your department";
+
+    if (!deptId) {
+      alert("Department ID not found. Please contact support.");
+      return;
+    }
+
+    if (!window.confirm(`Run end-of-day cleanup for ${deptName}? Employees who haven't checked in will be marked as Absent.`)) return;
+
+    try {
+      setCleaning(true);
+      await axios.post('/attendance/cleanup', { departmentId: deptId });
+      alert("Cleanup completed successfully.");
+      fetchAttendance();
+    } catch (error) {
+      alert(error.response?.data?.message || "Failed to run cleanup.");
+    } finally {
+      setCleaning(false);
+    }
+  };
+
+  // --- Styles ---
+  const managerDept = user?.departmentRel?.name || "My Department";
+  const titleText = isDark ? 'text-white' : 'text-slate-900';
+  const subText = isDark ? 'text-slate-400' : 'text-slate-500';
+  const cardClass = `transition-all duration-300 border rounded-[3rem] ${isDark ? 'bg-[#0b1220] border-white/5 shadow-none' : 'bg-white border-slate-200 shadow-sm'}`;
+  const inputBase = `w-full p-4 rounded-2xl border transition-all appearance-none text-sm font-bold outline-none focus:border-[#7c3aed] focus:ring-4 focus:ring-[#7c3aed]/10 ${
+        isDark ? 'bg-[#0f1623] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
+  }`;
 
   return (
-    <main className={`flex-1 overflow-y-auto p-6 ${styles.bgBody} transition-colors duration-500`}>
-      {/* Managerial Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+    <main className={`flex-1 space-y-8 p-6 lg:p-10 transition-colors duration-500 ${isDark ? 'bg-[#020617]' : 'bg-[#f1f5f9]'}`}>
+      
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="bg-[#7c3aed]/10 text-[#7c3aed] text-[10px] font-black px-2 py-0.5 rounded-md border border-[#7c3aed]/20 uppercase tracking-widest flex items-center gap-1">
-              <ShieldCheck size={12} /> Managerial Access
-            </span>
-            <span className={`${styles.textMuted} text-[10px] font-bold uppercase tracking-widest`}>
-              &gt; {managerDept} Department
-            </span>
-          </div>
-          <h1 className={`text-3xl font-black tracking-tight ${styles.textMain}`}>Team Attendance</h1>
+          <nav className={`text-[10px] font-black uppercase tracking-[0.3em] mb-2 flex items-center gap-2 ${isDark ? 'text-purple-500' : 'text-indigo-600'}`}>
+            <ShieldCheck size={14} /> Managerial Access &nbsp; • &nbsp; {managerDept}
+          </nav>
+          <h1 className={`text-[2rem] font-black tracking-tighter ${titleText}`}>Team Attendance</h1>
         </div>
-        <div className="flex gap-3">
-          <button className={`flex items-center gap-2 px-5 py-2.5 rounded-xl border ${styles.border} ${styles.textMain} hover:bg-white/5 transition-all text-sm font-bold`}>
-            <FileDown size={18} /> Export CSV
+        <div className="flex flex-wrap gap-3">
+          {/* End Day Cleanup Button */}
+          <button 
+            onClick={handleCleanup}
+            disabled={cleaning}
+            className={`flex items-center gap-2 px-6 py-4 rounded-2xl border transition-all text-[11px] font-black uppercase tracking-widest ${
+              isDark 
+              ? 'border-emerald-500/20 text-emerald-500 hover:bg-emerald-500/10' 
+              : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+            } disabled:opacity-50 active:scale-95`}
+          >
+            {cleaning ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+            Cleanup
+          </button>
+
+          <button className={`flex items-center gap-2 px-8 py-4 rounded-2xl border transition-all text-xs font-black uppercase tracking-widest ${isDark ? 'border-white/10 text-white hover:bg-white/5' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}>
+            <FileDown size={18} /> Export
           </button>
           <button 
-            onClick={() => setIsAddModalOpen(true)}
-            className="bg-[#7c3aed] hover:bg-[#6d28d9] text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-lg shadow-purple-500/25 active:scale-95"
+            onClick={() => { setSelectedRecord(null); setIsAddModalOpen(true); }}
+            className="bg-[#7c3aed] hover:bg-[#6d28d9] text-white px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all shadow-xl shadow-purple-500/20 flex items-center gap-2 active:scale-95"
           >
-            <Plus size={18} /> Log Entry
+            <Plus size={18} strokeWidth={3} /> Log Entry
           </button>
         </div>
       </div>
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard icon={<UserCheck />} label="Present in Engineering" value={filteredRecords.filter(r => r.status === 'On Time').length} sub="Real-time" color="emerald" isDark={isDark} />
-        <StatCard icon={<AlertTriangle />} label="Late Today" value={filteredRecords.filter(r => r.status === 'Late').length} sub="Needs Review" color="amber" isDark={isDark} />
-        <StatCard icon={<Clock />} label="Hours Logged" value="32.5h" sub="This Week" color="purple" isDark={isDark} />
-        <StatCard icon={<CalendarIcon />} label="Absent" value={filteredRecords.filter(r => r.status === 'Absent').length} sub="Unplanned" color="red" isDark={isDark} />
+      {/* Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard icon={<UserCheck size={20} />} label="Present Today" value={stats.presentToday} sub="In Dept" color="emerald" isDark={isDark} />
+        <StatCard icon={<AlertTriangle size={20} />} label="Late Entries" value={stats.lateEntries} sub="Review" color="amber" isDark={isDark} />
+        <StatCard icon={<Clock size={20} />} label="Avg. Work Day" value={stats.avgWorkDay} sub="Team Avg" color="purple" isDark={isDark} />
+        <StatCard icon={<CalendarIcon size={20} />} label="Total Absent" value={stats.totalAbsent} sub="Today" color="red" isDark={isDark} />
       </div>
 
-      {/* Main Table Card */}
-      <div className={`${styles.bgCard} border ${styles.border} rounded-2xl overflow-hidden shadow-sm flex flex-col`}>
-        {/* Table Controls */}
-        <div className={`p-5 border-b ${styles.border} flex flex-col xl:flex-row gap-4 justify-between items-center`}>
-          <div className="flex flex-col md:flex-row gap-4 w-full xl:w-auto">
-            <div className={`flex items-center ${styles.bgInput} border ${styles.border} px-4 py-2.5 rounded-xl gap-3 min-w-[320px] focus-within:border-[#7c3aed] transition-all`}>
-              <Search size={18} className={styles.textMuted} />
+      <div className={cardClass}>
+        {/* Toolbar */}
+        <div className={`flex flex-col xl:flex-row gap-4 p-8 border-b transition-colors ${isDark ? 'border-white/5 bg-white/2' : 'border-slate-100 bg-slate-50/50'}`}>
+          <div className="relative flex-1 group">
+            <Search className={`absolute left-5 top-1/2 -translate-y-1/2 transition-colors ${isDark ? 'text-slate-600 group-focus-within:text-[#7c3aed]' : 'text-slate-400'}`} size={20} />
+            <input 
+              type="text" 
+              placeholder="Search team member..." 
+              className={`${inputBase} pl-14 py-5 text-base`}
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className={`flex items-center rounded-2xl p-1.5 border transition-all ${isDark ? 'bg-[#0f1623] border-white/10' : 'bg-white border-slate-200'}`}>
+              <button onClick={() => shiftDate(-1)} className="p-2.5 hover:bg-[#7c3aed]/10 text-[#7c3aed] rounded-xl transition-all active:scale-90">
+                <ChevronLeft size={20} strokeWidth={3} />
+              </button>
               <input 
-                type="text" 
-                placeholder={`Search ${managerDept} staff...`} 
-                className={`bg-transparent border-none outline-none text-sm w-full ${styles.textMain} placeholder:${styles.textMuted}`}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                type="date"
+                className={`bg-transparent px-4 text-xs font-black uppercase tracking-widest outline-none cursor-pointer ${titleText}`}
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
               />
+              <button onClick={() => shiftDate(1)} className="p-2.5 hover:bg-[#7c3aed]/10 text-[#7c3aed] rounded-xl transition-all active:scale-90">
+                <ChevronRight size={20} strokeWidth={3} />
+              </button>
+            </div>
+          </div>
+
+          <div className="relative w-full xl:w-48">
+            <select 
+              className={`${inputBase} py-5 pr-10`}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option>All Status</option>
+              <option>On Time</option>
+              <option>Late</option>
+              <option>Half Day</option>
+              <option>Absent</option>
+            </select>
+            <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={18} />
+          </div>
+        </div>
+
+        {/* Table Content */}
+        <div className="p-8 lg:px-12 overflow-x-auto min-h-100 relative">
+          {loading ? (
+             <div className="py-20 flex flex-col items-center justify-center space-y-4">
+               <Loader2 className="w-10 h-10 animate-spin text-[#7c3aed]" />
+               <p className={`text-xs font-black uppercase tracking-widest ${subText}`}>Fetching Team Data...</p>
+             </div>
+          ) : (
+            <table className="w-full text-left border-separate border-spacing-y-3">
+              <thead>
+                <tr className={`text-[10px] uppercase tracking-[0.2em] font-black ${subText}`}>
+                  <th className="pb-4 px-6">Staff Member</th>
+                  <th className="pb-4 px-6">Check In</th>
+                  <th className="pb-4 px-6">Check Out</th>
+                  <th className="pb-4 px-6">Total Hours</th>
+                  <th className="pb-4 px-6">Status</th>
+                  <th className="pb-4 px-6 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentItems.length > 0 ? currentItems.map((rec) => (
+                  <tr key={rec.id} className="group transition-all">
+                    <td className={`py-6 px-6 rounded-l-3xl border-y border-l transition-colors ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-white'}`}>
+                      <div className="flex items-center gap-4">
+                        <div className="w-11 h-11 rounded-2xl bg-linear-to-tr from-[#7c3aed] to-purple-400 flex items-center justify-center text-white font-black text-xs shadow-lg group-hover:scale-110 transition-transform">
+                          {rec.name?.charAt(0)}
+                        </div>
+                        <div>
+                          <div className={`text-sm font-black tracking-tight ${titleText}`}>{rec.name}</div>
+                          <div className={`text-[10px] font-bold ${subText} uppercase`}>{rec.departmentName || managerDept}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className={`py-6 px-6 border-y transition-colors font-mono text-xs ${isDark ? 'border-white/5 bg-white/1 text-slate-300' : 'border-slate-100 bg-white text-slate-600'}`}>
+                      {rec.checkIn || '--:--'}
+                    </td>
+                    <td className={`py-6 px-6 border-y transition-colors font-mono text-xs ${isDark ? 'border-white/5 bg-white/1 text-slate-300' : 'border-slate-100 bg-white text-slate-600'}`}>
+                      {rec.checkOut || '--:--'}
+                    </td>
+                    <td className={`py-6 px-6 border-y transition-colors ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-white'}`}>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-1.5 h-1.5 rounded-full ${rec.workHours >= 8 ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
+                        <span className={`text-sm font-black ${titleText}`}>{formatWorkHours(rec.workHours)}</span>
+                      </div>
+                    </td>
+                    <td className={`py-6 px-6 border-y transition-colors ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-white'}`}>
+                      <span className={getStatusBadge(rec.status)}>{rec.status}</span>
+                    </td>
+                    <td className={`py-6 px-6 rounded-r-3xl border-y border-r text-right transition-colors ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-white'}`}>
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => { setSelectedRecord(rec); setIsViewModalOpen(true); }} className={`p-3 rounded-xl border transition-all ${isDark ? 'border-white/5 text-slate-500 hover:bg-[#7c3aed] hover:text-white' : 'border-slate-100 text-slate-400 hover:bg-[#7c3aed] hover:text-white'}`}>
+                          <Eye size={18} strokeWidth={2.5} />
+                        </button>
+                        <button onClick={() => { setSelectedRecord(rec); setIsEditModalOpen(true); }} className={`p-3 rounded-xl border transition-all ${isDark ? 'border-white/5 text-slate-500 hover:bg-[#7c3aed] hover:text-white' : 'border-slate-100 text-slate-400 hover:bg-[#7c3aed] hover:text-white'}`}>
+                          <Edit size={18} strokeWidth={2.5} />
+                        </button>
+                        {!rec.isPlaceholder && (
+                          <button onClick={() => handleDelete(rec.id)} className={`p-3 rounded-xl border transition-all ${isDark ? 'border-white/5 text-slate-500 hover:bg-red-500 hover:text-white' : 'border-slate-100 text-slate-400 hover:bg-red-500 hover:text-white'}`}>
+                            <Trash2 size={18} strokeWidth={2.5} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan="6" className="py-20 text-center text-xs font-black uppercase tracking-widest opacity-30">No Team Records Found</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* --- PAGINATION FOOTER --- */}
+        {!loading && records.length > 0 && (
+          <div className={`p-8 border-t transition-colors flex flex-col sm:flex-row justify-between items-center gap-6 ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-slate-50/30'}`}>
+            <div className={`text-[10px] font-black uppercase tracking-widest ${subText}`}>
+              Showing <span className={titleText}>{Math.min(records.length, (currentPage - 1) * itemsPerPage + 1)}</span> to <span className={titleText}>{Math.min(records.length, currentPage * itemsPerPage)}</span> of <span className={titleText}>{records.length}</span> team records
             </div>
             
             <div className="flex items-center gap-2">
-               <div className={`flex items-center ${styles.bgInput} border ${styles.border} rounded-xl overflow-hidden`}>
-                  <button onClick={() => shiftDate(-1)} className={`p-2.5 ${styles.textMuted} hover:text-[#7c3aed] border-r ${styles.border}`}>
-                    <ChevronLeft size={18} />
+              <button 
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(prev => prev - 1)}
+                className={`p-3 rounded-xl border transition-all active:scale-95 disabled:opacity-20 ${isDark ? 'border-white/10 text-white hover:bg-white/5' : 'border-slate-200 text-slate-600 hover:bg-white shadow-sm'}`}
+              >
+                <ChevronLeft size={18} strokeWidth={3} />
+              </button>
+              
+              <div className="flex gap-1 px-2">
+                {[...Array(totalPages)].map((_, i) => (
+                  <button
+                    key={i + 1}
+                    onClick={() => setCurrentPage(i + 1)}
+                    className={`w-10 h-10 rounded-xl text-[11px] font-black transition-all ${
+                      currentPage === i + 1 
+                      ? 'bg-[#7c3aed] text-white shadow-lg shadow-purple-500/30' 
+                      : `${isDark ? 'text-slate-500 hover:bg-white/5' : 'text-slate-400 hover:bg-slate-100'}`
+                    }`}
+                  >
+                    {i + 1}
                   </button>
-                  <input 
-                    type="date"
-                    className={`bg-transparent ${styles.textMain} px-4 py-2.5 text-sm outline-none cursor-pointer focus:text-[#7c3aed]`}
-                    value={dateFilter}
-                    onChange={(e) => setDateFilter(e.target.value)}
-                  />
-                  <button onClick={() => shiftDate(1)} className={`p-2.5 ${styles.textMuted} hover:text-[#7c3aed] border-l ${styles.border}`}>
-                    <ChevronRight size={18} />
-                  </button>
-               </div>
-            </div>
-          </div>
-          
-          <select 
-            className={`${styles.bgInput} border ${styles.border} ${styles.textMain} text-xs font-bold rounded-xl px-4 py-2.5 outline-none focus:border-[#7c3aed]`}
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option>All Status</option>
-            <option>On Time</option>
-            <option>Late</option>
-            <option>Absent</option>
-          </select>
-        </div>
+                ))}
+              </div>
 
-        {/* Attendance Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse">
-            <thead>
-              <tr className={`text-[10px] ${styles.textMuted} uppercase tracking-widest font-black border-b ${styles.border} ${isDark ? 'bg-black/20' : 'bg-slate-50'}`}>
-                <th className="p-5">Team Member</th>
-                <th className="p-5">Date</th>
-                <th className="p-5">Check In</th>
-                <th className="p-5">Check Out</th>
-                <th className="p-5">Status</th>
-                <th className="p-5 text-right">Review Actions</th>
-              </tr>
-            </thead>
-            <tbody className={`divide-y ${styles.border}`}>
-              {currentItems.length > 0 ? currentItems.map((rec) => (
-                <tr key={rec.id} className={`${styles.tableRow} transition-colors`}>
-                  <td className="p-5">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-lg ${isDark ? 'bg-white/5' : 'bg-slate-100'} flex items-center justify-center text-[#7c3aed] font-black text-xs border ${styles.border}`}>
-                        {rec.name.charAt(0)}
-                      </div>
-                      <div className={`font-bold ${styles.textMain}`}>{rec.name}</div>
-                    </div>
-                  </td>
-                  <td className={`p-5 font-medium ${styles.textMain}`}>{rec.date}</td>
-                  <td className={`p-5 font-mono text-xs ${styles.textMain}`}>{rec.checkIn}</td>
-                  <td className={`p-5 font-mono text-xs ${styles.textMain}`}>{rec.checkOut}</td>
-                  <td className="p-5">
-                    <StatusBadge status={rec.status} />
-                  </td>
-                  <td className="p-5 text-right">
-                    <div className="flex justify-end items-center gap-2">
-                      <button 
-                        onClick={() => { setSelectedRecord(rec); setIsViewModalOpen(true); }} 
-                        className="p-2 rounded-lg bg-[#7c3aed]/5 text-[#7c3aed] hover:bg-[#7c3aed] hover:text-white transition-all"
-                      >
-                        <Eye size={15} />
-                      </button>
-                      <button 
-                        onClick={() => { setSelectedRecord(rec); setIsEditModalOpen(true); }} 
-                        className="p-2 rounded-lg bg-emerald-500/5 text-emerald-500 hover:bg-emerald-500 hover:text-white transition-all"
-                      >
-                        <Edit size={15} />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(rec.id)}
-                        className="p-2 rounded-lg bg-red-500/5 text-red-500 hover:bg-red-500 hover:text-white transition-all"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )) : (
-                <tr>
-                  <td colSpan="6" className={`p-20 text-center ${styles.textMuted} italic`}>
-                    No records found for the {managerDept} department on this date.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination Footer */}
-        {filteredRecords.length > 0 && (
-          <div className={`p-5 border-t ${styles.border} flex items-center justify-between`}>
-            <div className={`text-xs font-bold ${styles.textMuted}`}>
-              Showing <span className={styles.textMain}>{indexOfFirstItem + 1}</span> to <span className={styles.textMain}>{Math.min(indexOfLastItem, filteredRecords.length)}</span> of {filteredRecords.length}
-            </div>
-            <div className="flex gap-2">
-               <button 
-                 disabled={currentPage === 1}
-                 onClick={() => setCurrentPage(prev => prev - 1)}
-                 className={`p-2 rounded-lg border ${styles.border} ${styles.textMain} disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/5`}
-               >
-                 <ChevronLeft size={16} />
-               </button>
-               <button 
-                 disabled={currentPage === totalPages}
-                 onClick={() => setCurrentPage(prev => prev + 1)}
-                 className={`p-2 rounded-lg border ${styles.border} ${styles.textMain} disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/5`}
-               >
-                 <ChevronRight size={16} />
-               </button>
+              <button 
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(prev => prev + 1)}
+                className={`p-3 rounded-xl border transition-all active:scale-95 disabled:opacity-20 ${isDark ? 'border-white/10 text-white hover:bg-white/5' : 'border-slate-200 text-slate-600 hover:bg-white shadow-sm'}`}
+              >
+                <ChevronRight size={18} strokeWidth={3} />
+              </button>
             </div>
           </div>
         )}
       </div>
 
       {/* Modals */}
-      <AddAttendanceRecordModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} theme={theme} />
-      <EditAttendanceRecordModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} theme={theme} data={selectedRecord} />
+      <AddAttendanceRecordModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} theme={theme} onRefresh={fetchAttendance} />
+      <EditAttendanceRecordModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} theme={theme} data={selectedRecord} onRefresh={fetchAttendance} />
       <ViewAttendanceRecordModal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} theme={theme} data={selectedRecord} />
     </main>
   );
 };
 
-// --- Sub-components ---
-const StatusBadge = ({ status }) => {
-  const base = "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border inline-block ";
-  switch(status) {
-    case 'On Time': return <span className={base + "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"}>On Time</span>;
-    case 'Late': return <span className={base + "bg-amber-500/10 text-amber-500 border-amber-500/20"}>Late</span>;
-    case 'Absent': return <span className={base + "bg-red-500/10 text-red-500 border-red-500/20"}>Absent</span>;
-    default: return <span className={base + "bg-slate-500/10 text-slate-500 border-slate-500/20"}>{status}</span>;
-  }
-};
-
 const StatCard = ({ icon, label, value, sub, color, isDark }) => {
   const colorMap = {
-    emerald: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
-    amber: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
-    purple: 'bg-[#7c3aed]/10 text-[#7c3aed] border-[#7c3aed]/20',
-    red: 'bg-red-500/10 text-red-500 border-red-500/20'
+    emerald: isDark ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-emerald-50 text-emerald-600 border-emerald-200',
+    amber: isDark ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-amber-50 text-amber-600 border-amber-200',
+    purple: isDark ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' : 'bg-indigo-50 text-indigo-600 border-indigo-200',
+    red: isDark ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-red-50 text-red-600 border-red-200'
   };
-
   return (
-    <div className={`${isDark ? 'bg-[#0b1220]' : 'bg-white'} border ${isDark ? 'border-white/10' : 'border-slate-200'} p-5 rounded-2xl transition-all duration-500`}>
+    <div className={`p-6 rounded-[2.5rem] border transition-all duration-300 group hover:scale-[1.02] ${isDark ? 'bg-[#0b1220] border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
       <div className="flex justify-between items-start mb-4">
-        <div className={`p-2 rounded-xl border ${colorMap[color]}`}>
-          {React.cloneElement(icon, { size: 20 })}
-        </div>
-        <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isDark ? 'bg-white/5 text-white/40' : 'bg-slate-100 text-slate-500'}`}>
-          {sub}
-        </div>
+        <div className={`p-3 rounded-2xl border transition-transform group-hover:rotate-12 ${colorMap[color]}`}>{icon}</div>
+        <div className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full ${isDark ? 'bg-white/5 text-slate-500' : 'bg-slate-100 text-slate-400'}`}>{sub}</div>
       </div>
       <div className={`text-3xl font-black mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>{value}</div>
-      <div className={`text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-[#94a3b8]' : 'text-slate-500'}`}>{label}</div>
+      <div className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{label}</div>
     </div>
   );
 };

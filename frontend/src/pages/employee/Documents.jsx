@@ -1,67 +1,72 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, FileText, Download, Eye, FolderOpen, FileSignature, 
   IdCard, GraduationCap, FileBadge, Filter, ChevronLeft, ChevronRight,
-  Lock
+  Lock, Loader2, BookOpen
 } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
+import axios from 'axios';
 
 // Only the View Modal is kept for Employee access
 import ViewDocuments from '../../modals/employee/ViewDocuments';
 
 const Documents = () => {
-  // --- Theme Logic via useOutletContext ---
-  const { theme } = useOutletContext();
+  // --- Theme & User Logic via useOutletContext ---
+  const { theme, user } = useOutletContext(); 
   const isDark = theme === 'dark';
 
-  // --- Current User Identity (Scoped to the logged-in employee) ---
-  const currentUser = { name: "John Doe" };
-
   // --- State ---
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [currentCategory, setCurrentCategory] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeMenu, setActiveMenu] = useState(null);
   
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+  const itemsPerPage = 8;
   
   // Modal Visibility States
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [selectedFileData, setSelectedFileData] = useState(null);
 
-  // --- Data ---
-  const [files] = useState([
-    { id: 1, emp: "Jessica Taylor", name: "Employee_NDA_2024.pdf", cat: "contracts", size: "1.2 MB", date: "2024-01-10" },
-    { id: 3, emp: "John Doe", name: "Degree_Certificate.pdf", cat: "certificates", size: "2.1 MB", date: "2023-11-20" },
-    { id: 7, emp: "John Doe", name: "John_Doe_Contract.pdf", cat: "contracts", size: "1.8 MB", date: "2024-01-05" },
-    { id: 8, emp: "John Doe", name: "Passport_Scan.pdf", cat: "identity", size: "800 KB", date: "2024-05-12" },
-    { id: 4, emp: "Sarah Johnson", name: "Paystub_Dec_2025.pdf", cat: "payslips", size: "150 KB", date: "2025-12-01" },
-  ]);
-
-  // --- CORE FUNCTIONS ---
-
-  const handleDownload = (file) => {
-    console.log("Downloading:", file.name);
+  // --- Fetch Data from Backend ---
+  const fetchMyDocuments = async () => {
+    if (!user?.id) return;
+    
+    setLoading(true);
+    try {
+      const response = await axios.get('http://localhost:5000/api/documents', {
+        params: { 
+          userId: user.id, 
+          category: currentCategory,
+          search: searchTerm 
+        }
+      });
+      setFiles(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error("❌ Error fetching your documents:", error);
+      setFiles([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // --- Filtering Logic (Strictly filters by currentUser.name) ---
-  const filteredFiles = useMemo(() => {
-    return files.filter(file => {
-      // SECURITY: Ensure the document belongs to the logged-in user
-      const isMyDocument = file.emp === currentUser.name;
-      const matchCategory = currentCategory === 'all' || file.cat === currentCategory;
-      const matchSearch = file.name.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      return isMyDocument && matchCategory && matchSearch;
-    });
-  }, [currentCategory, searchTerm, files, currentUser.name]);
+  useEffect(() => {
+    fetchMyDocuments();
+  }, [currentCategory, searchTerm, user?.id]);
+
+  // --- Core Functions ---
+  const handleDownload = (file) => {
+    if (file.fileUrl) {
+        window.open(file.fileUrl, '_blank');
+    }
+  };
 
   // Pagination Logic
-  const totalPages = Math.ceil(filteredFiles.length / itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(files.length / itemsPerPage));
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredFiles.slice(indexOfFirstItem, indexOfLastItem);
+  const currentItems = files.slice(indexOfFirstItem, indexOfLastItem);
 
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) setCurrentPage(newPage);
@@ -78,47 +83,47 @@ const Documents = () => {
   };
 
   return (
-    <main className={`flex-1 overflow-y-auto p-6 ${styles.bgBody}`} onClick={() => setActiveMenu(null)}>
+    <main className={`flex-1 overflow-y-auto p-6 ${styles.bgBody} transition-colors duration-300`}>
       
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
           <h1 className={`text-4xl font-black tracking-tighter ${styles.textMain}`}>My Documents</h1>
-          <p className={`${styles.textMuted} text-sm mt-1`}>Access and view your personal records and certificates.</p>
+          <p className={`${styles.textMuted} text-sm mt-1`}>Manage and view your official employee records.</p>
         </div>
         
-        {/* Security Indicator */}
         <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${styles.border} ${styles.textMuted}`}>
           <Lock size={14} />
-          <span className="text-[10px] font-bold uppercase tracking-wider">Read Only Access</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider">Secure Access</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8">
         {/* Sidebar Filters */}
-        <aside className={`${styles.bgCard} border ${styles.border} rounded-4xl p-6 h-fit`}>
+        <aside className={`${styles.bgCard} border ${styles.border} rounded-4xl p-6 h-fit sticky top-6`}>
           <div className="flex items-center gap-2 mb-6 px-2">
             <Filter size={16} className="text-[#7c3aed]" />
             <h4 className="text-[10px] font-bold text-[#94a3b8] tracking-[0.2em] uppercase">My Vaults</h4>
           </div>
           <nav className="space-y-1">
             {[
-              { id: 'all', label: 'All Files', icon: <FolderOpen size={16} /> },
-              { id: 'contracts', label: 'My Contracts', icon: <FileSignature size={16} /> },
-              { id: 'identity', label: 'My Identity', icon: <IdCard size={16} /> },
-              { id: 'certificates', label: 'Certificates', icon: <GraduationCap size={16} /> },
-              { id: 'payslips', label: 'Payslips', icon: <FileBadge size={16} /> },
+              { id: 'all', label: 'All Files', icon: <FolderOpen size={18} /> },
+              { id: 'contracts', label: 'Contracts', icon: <FileSignature size={18} /> },
+              { id: 'academic', label: 'Academic', icon: <BookOpen size={18} /> },
+              { id: 'id', label: 'Identity / IDs', icon: <IdCard size={18} /> },
+              { id: 'certificate', label: 'Certificates', icon: <GraduationCap size={18} /> },
+              { id: 'payslip', label: 'Payslips', icon: <FileBadge size={18} /> },
             ].map((cat) => (
               <button 
                 key={cat.id}
                 onClick={() => { setCurrentCategory(cat.id); setCurrentPage(1); }}
-                className={`w-full flex items-center justify-between p-4 rounded-2xl text-sm transition-all ${
+                className={`w-full flex items-center justify-between p-4 rounded-2xl text-xs uppercase font-black tracking-tight transition-all ${
                   currentCategory === cat.id 
-                  ? 'bg-[#7c3aed] text-white font-black shadow-lg shadow-purple-500/20' 
+                  ? 'bg-[#7c3aed] text-white shadow-lg shadow-purple-500/20' 
                   : `${styles.textMuted} hover:bg-white/5 hover:text-[#7c3aed]`
                 }`}
               >
-                <span className="flex items-center gap-3">
+                <span className="flex items-center gap-4">
                   {cat.icon} {cat.label}
                 </span>
               </button>
@@ -127,74 +132,91 @@ const Documents = () => {
         </aside>
 
         {/* Main Content Area */}
-        <div className={`${styles.bgCard} border ${styles.border} rounded-4xl p-8`}>
+        <div className={`${styles.bgCard} border ${styles.border} rounded-[2.5rem] p-8`}>
           <div className="relative mb-8">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-[#94a3b8]" size={20} />
+            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-[#94a3b8]" size={20} />
             <input 
               type="text" 
-              placeholder="Search your documents..." 
+              placeholder="Filter your records by name..." 
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-              className={`w-full ${styles.inputBg} border ${styles.border} text-sm rounded-2xl pl-14 pr-6 py-5 outline-none focus:border-[#7c3aed] ${styles.textMain} transition-all`}
+              className={`w-full ${styles.inputBg} border ${styles.border} text-sm font-bold rounded-2xl pl-16 pr-6 py-6 outline-none focus:border-[#7c3aed] ${styles.textMain} transition-all`}
             />
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="text-[10px] text-[#94a3b8] uppercase tracking-[0.15em] border-b border-white/5">
-                  <th className="pb-5 px-4">Document Name</th>
-                  <th className="pb-5 px-4">Size</th>
-                  <th className="pb-5 px-4">Upload Date</th>
-                  <th className="pb-5 px-4">Category</th>
-                  <th className="pb-5 px-4 text-right">Action</th>
+                <tr className="text-[10px] text-[#94a3b8] uppercase tracking-[0.2em] border-b border-white/5 font-black">
+                  <th className="pb-6 px-4">Document Details</th>
+                  <th className="pb-6 px-4">Size</th>
+                  <th className="pb-6 px-4">Uploaded</th>
+                  <th className="pb-6 px-4">Category</th>
+                  <th className="pb-6 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {currentItems.length > 0 ? currentItems.map((file) => (
-                  <tr key={file.id} className="group hover:bg-white/2 transition-colors">
-                    <td className="py-5 px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-red-500/10 text-red-500 rounded-lg">
-                          <FileText size={16} />
+                {loading ? (
+                  <tr>
+                    <td colSpan="5" className="py-24 text-center">
+                        <div className="flex flex-col items-center gap-4">
+                            <Loader2 className="animate-spin text-[#7c3aed]" size={40} />
+                            <span className={`text-xs font-black uppercase tracking-widest ${styles.textMuted}`}>Syncing Records...</span>
                         </div>
-                        <span className={`text-sm font-bold ${styles.textMain}`}>{file.name}</span>
+                    </td>
+                  </tr>
+                ) : currentItems.length > 0 ? currentItems.map((file) => (
+                  <tr key={file.id} className="group hover:bg-white/5 transition-colors">
+                    <td className="py-6 px-4">
+                      <div className="flex items-center gap-4">
+                        <div className={`p-3 rounded-xl ${isDark ? 'bg-red-500/10' : 'bg-red-50'} text-red-500 transition-transform group-hover:scale-110`}>
+                          <FileText size={20} />
+                        </div>
+                        <div className="flex flex-col">
+                            <span className={`text-sm font-black tracking-tight ${styles.textMain}`}>{file.name}</span>
+                            <span className="text-[10px] text-purple-500 font-bold uppercase tracking-wider">PDF Document</span>
+                        </div>
                       </div>
                     </td>
-                    <td className="py-5 px-4">
-                      <span className={`text-xs ${styles.textMuted}`}>{file.size}</span>
+                    <td className="py-6 px-4">
+                      <span className={`text-xs font-bold ${styles.textMuted}`}>{file.size || 'N/A'}</span>
                     </td>
-                    <td className="py-5 px-4">
-                      <span className={`text-xs ${styles.textMuted}`}>{file.date}</span>
-                    </td>
-                    <td className="py-5 px-4">
-                      <span className="text-[10px] font-black uppercase tracking-widest bg-white/5 px-3 py-1.5 rounded-lg text-[#94a3b8]">
-                        {file.cat}
+                    <td className="py-6 px-4">
+                      <span className={`text-xs font-bold ${styles.textMuted}`}>
+                        {new Date(file.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
                       </span>
                     </td>
-                    <td className="py-5 px-4 text-right relative">
+                    <td className="py-6 px-4">
+                      <span className="text-[9px] font-black uppercase tracking-widest bg-white/5 border border-white/5 px-3 py-1.5 rounded-lg text-[#94a3b8]">
+                        {file.category}
+                      </span>
+                    </td>
+                    <td className="py-6 px-4 text-right">
                       <div className="flex justify-end gap-2">
                         <button 
                           onClick={() => { setSelectedFileData(file); setIsViewOpen(true); }} 
-                          className="p-2.5 text-[#94a3b8] hover:text-blue-500 hover:bg-blue-500/10 rounded-xl transition-all"
-                          title="View Document"
+                          className={`p-3 rounded-xl transition-all ${isDark ? 'text-slate-400 hover:text-blue-400 hover:bg-blue-400/10' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                          title="View"
                         >
-                          <Eye size={18} />
+                          <Eye size={20} />
                         </button>
                         <button 
                           onClick={() => handleDownload(file)} 
-                          className="p-2.5 text-[#94a3b8] hover:text-[#7c3aed] hover:bg-[#7c3aed1a] rounded-xl transition-all"
-                          title="Download PDF"
+                          className={`p-3 rounded-xl transition-all ${isDark ? 'text-slate-400 hover:text-[#7c3aed] hover:bg-[#7c3aed]/10' : 'text-slate-400 hover:text-[#7c3aed] hover:bg-purple-50'}`}
+                          title="Download"
                         >
-                          <Download size={18} />
+                          <Download size={20} />
                         </button>
                       </div>
                     </td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan="5" className={`py-20 text-center ${styles.textMuted} italic`}>
-                      No documents found in this category.
+                    <td colSpan="5" className={`py-24 text-center ${styles.textMuted} italic`}>
+                      <div className="flex flex-col items-center gap-2 opacity-50">
+                        <FolderOpen size={48} />
+                        <span className="text-xs font-black uppercase tracking-widest mt-4">No documents found</span>
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -203,25 +225,25 @@ const Documents = () => {
           </div>
 
           {/* Pagination */}
-          {filteredFiles.length > itemsPerPage && (
-            <div className="mt-8 flex justify-between items-center border-t border-white/5 pt-6">
-              <p className="text-xs text-[#94a3b8] font-bold uppercase tracking-widest">
-                Showing {indexOfFirstItem + 1}-{Math.min(indexOfLastItem, filteredFiles.length)} of {filteredFiles.length}
+          {!loading && files.length > itemsPerPage && (
+            <div className="mt-10 flex justify-between items-center border-t border-white/5 pt-8">
+              <p className="text-[10px] text-[#94a3b8] font-black uppercase tracking-widest">
+                Showing {indexOfFirstItem + 1}-{Math.min(indexOfLastItem, files.length)} of {files.length}
               </p>
               <div className="flex gap-2">
                 <button 
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1}
-                  className={`p-2.5 rounded-xl border ${styles.border} ${currentPage === 1 ? 'opacity-30 cursor-not-allowed' : 'hover:border-[#7c3aed] text-[#7c3aed]'} transition-all`}
+                  className={`w-11 h-11 flex items-center justify-center rounded-xl border ${styles.border} ${currentPage === 1 ? 'opacity-20 cursor-not-allowed' : 'hover:border-[#7c3aed] text-[#7c3aed] hover:bg-[#7c3aed]/5'} transition-all`}
                 >
-                  <ChevronLeft size={18} />
+                  <ChevronLeft size={20} />
                 </button>
                 <button 
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages}
-                  className={`p-2.5 rounded-xl border ${styles.border} ${currentPage === totalPages ? 'opacity-30 cursor-not-allowed' : 'hover:border-[#7c3aed] text-[#7c3aed]'} transition-all`}
+                  className={`w-11 h-11 flex items-center justify-center rounded-xl border ${styles.border} ${currentPage === totalPages ? 'opacity-20 cursor-not-allowed' : 'hover:border-[#7c3aed] text-[#7c3aed] hover:bg-[#7c3aed]/5'} transition-all`}
                 >
-                  <ChevronRight size={18} />
+                  <ChevronRight size={20} />
                 </button>
               </div>
             </div>
@@ -229,7 +251,7 @@ const Documents = () => {
         </div>
       </div>
 
-      {/* VIEW MODAL ONLY */}
+      {/* VIEW MODAL */}
       {selectedFileData && (
         <ViewDocuments 
           isOpen={isViewOpen} 

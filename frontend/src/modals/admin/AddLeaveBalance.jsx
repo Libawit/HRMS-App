@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Search, Loader2 } from 'lucide-react';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 
 
   const AddLeaveBalance = ({ isOpen, onClose, theme = 'dark', selectedYear }) => {
@@ -61,8 +61,8 @@ import axios from 'axios';
         try {
           // Note: URLs match the new routes we added to authRoutes.js
           const [userRes, leaveRes] = await Promise.all([
-            axios.get('http://localhost:3000/api/auth/users'),
-            axios.get('http://localhost:3000/api/auth/leave-types')
+            axios.get('http://localhost:5000/api/auth/users'),
+            axios.get('http://localhost:5000/api/auth/leave-types')
           ]);
           setEmployees(Array.isArray(userRes.data) ? userRes.data : []);
           setLeaveTypes(Array.isArray(leaveRes.data) ? leaveRes.data : []);
@@ -113,7 +113,7 @@ import axios from 'axios';
   };
 
   try {
-    await axios.post('http://localhost:3000/api/auth/leave-balances', payload);
+    await axios.post('http://localhost:5000/api/auth/leave-balances', payload);
     onClose();
   } catch (error) {
     alert(error.response?.data?.error || "Error creating balance");

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Search, Loader2, Calendar, AlertCircle, FileText } from 'lucide-react';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 
 const AddLeaveRequest = ({ isOpen, onClose, theme = 'dark', onRefresh }) => {
   // --- Form State ---
@@ -51,8 +51,8 @@ const AddLeaveRequest = ({ isOpen, onClose, theme = 'dark', onRefresh }) => {
         setLoading(true);
         try {
           const [userRes, leaveRes] = await Promise.all([
-            axios.get('http://localhost:3000/api/auth/users'),
-            axios.get('http://localhost:3000/api/auth/leave-types')
+            axios.get('http://localhost:5000/api/auth/users'),
+            axios.get('http://localhost:5000/api/auth/leave-types')
           ]);
           setEmployees(Array.isArray(userRes.data) ? userRes.data : []);
           setLeaveTypes(Array.isArray(leaveRes.data) ? leaveRes.data : []);
@@ -103,7 +103,7 @@ const AddLeaveRequest = ({ isOpen, onClose, theme = 'dark', onRefresh }) => {
   };
 
   try {
-    await axios.post('http://localhost:3000/api/auth/leave-requests', payload);
+    await axios.post('http://localhost:5000/api/auth/leave-requests', payload);
     onRefresh();
     onClose();
   } catch (err) {

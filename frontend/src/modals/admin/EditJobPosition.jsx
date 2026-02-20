@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Briefcase, Layers, DollarSign, ListChecks, Save, Clock, Loader2, ChevronDown } from 'lucide-react';
+import api from '../../utils/axiosConfig'; // Ensure this path is correct
 
 const EditJobPositionModal = ({ isOpen, onClose, theme = 'dark', data, departments = [], onSuccess }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -40,7 +41,6 @@ const EditJobPositionModal = ({ isOpen, onClose, theme = 'dark', data, departmen
   const handleUpdate = async (e) => {
     e.preventDefault();
 
-    // Safety Guard: Prevent "Unassigned" by ensuring ID exists
     if (!formData.departmentId) {
       alert("A department must be selected.");
       return;
@@ -48,22 +48,20 @@ const EditJobPositionModal = ({ isOpen, onClose, theme = 'dark', data, departmen
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`http://localhost:3000/api/auth/positions/${data.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
+      // ✅ USE AXIOS (api) INSTEAD OF fetch
+      // This automatically sends your Bearer Token
+      const response = await api.put(`/positions/${data.id}`, formData);
 
-      if (response.ok) {
+      // Axios considers anything in the 200 range a success
+      if (response.status === 200) {
         onSuccess(); 
         onClose();
-      } else {
-        const err = await response.json();
-        alert(err.message || "Failed to update position");
       }
     } catch (error) {
       console.error("Update error:", error);
-      alert("An error occurred during update.");
+      // Access the backend error message properly via Axios
+      const errorMsg = error.response?.data?.message || "An error occurred during update.";
+      alert(errorMsg);
     } finally {
       setIsSubmitting(false);
     }

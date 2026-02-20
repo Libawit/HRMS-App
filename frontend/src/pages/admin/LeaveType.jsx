@@ -31,7 +31,7 @@ const LeaveType = () => {
   const fetchLeaveTypes = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('http://localhost:3000/api/auth/leave-types');
+      const response = await axios.get('http://localhost:5000/api/auth/leave-types');
       setLeaveTypes(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error("Error fetching leave types:", error);
@@ -82,7 +82,7 @@ const LeaveType = () => {
   const handleDelete = async (id) => {
     if (window.confirm("Are you sure you want to delete this leave type?")) {
       try {
-        await axios.delete(`http://localhost:3000/api/auth/leave-types/${id}`);
+        await axios.delete(`http://localhost:5000/api/auth/leave-types/${id}`);
         setLeaveTypes(prev => prev.filter(t => t.id !== id));
       } catch (error) {
         alert("Failed to delete leave type. It might be in use.");

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 import { 
   X, Calendar, Save, CheckCircle2, 
   Loader2, Trash2, MessageSquare, Info 
@@ -52,7 +52,7 @@ const EditLeaveCalendar = ({ isOpen, onClose, theme = 'dark', data, onRefresh })
     setLoading(true);
     try {
       // API call sends new dates and recalculates daysRequested for the backend
-      await axios.patch(`http://localhost:3000/api/auth/leave-requests/${data.id}/status`, {
+      await axios.patch(`http://localhost:5000/api/auth/leave-requests/${data.id}/status`, {
         status: 'APPROVED',
         startDate: formData.startDate,
         endDate: formData.endDate,
@@ -72,7 +72,7 @@ const EditLeaveCalendar = ({ isOpen, onClose, theme = 'dark', data, onRefresh })
   const handleDelete = async () => {
     if (!window.confirm("Delete this leave record permanently?")) return;
     try {
-      await axios.delete(`http://localhost:3000/api/auth/leave-requests/${data.id}`);
+      await axios.delete(`http://localhost:5000/api/auth/leave-requests/${data.id}`);
       if (onRefresh) onRefresh();
       onClose();
     } catch (error) {

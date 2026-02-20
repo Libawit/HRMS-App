@@ -1,30 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react'; // Added useRef
 import { 
-  Clock, 
-  Calendar, 
-  Play, 
-  Square, 
-  Info, 
-  AlertCircle, 
-  ShieldCheck, 
-  Timer,
-  CheckCircle2,
-  MapPin,
-  Printer,
-  Loader2,
-  Bot
+  Clock, Calendar, Play, Square, Info, AlertCircle, ShieldCheck, 
+  Timer, CheckCircle2, MapPin, Printer, Loader2, Bot
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useOutletContext } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 
 const TimeTracking = () => {
-  // --- Theme & Context ---
   const context = useOutletContext();
   const theme = context?.theme || 'dark';
   const isDark = theme === 'dark';
 
-  // --- State Management ---
   const [currentTime, setCurrentTime] = useState(new Date());
   const [status, setStatus] = useState('Inactive');
   const [isPunchedIn, setIsPunchedIn] = useState(false);
@@ -33,16 +20,14 @@ const TimeTracking = () => {
   const [loading, setLoading] = useState(true);
   const [punchLoading, setPunchLoading] = useState(false);
   
-  // The Station ID that the Telegram bot looks for
   const staticStationId = "COMPANY-MAIN-STATION-001"; 
+  const qrRef = useRef(); // Reference for the QR section
 
-  // --- Real-time Clock Effect ---
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // --- Load Current Attendance Status ---
   useEffect(() => {
     fetchCurrentStatus();
   }, []);
@@ -50,14 +35,12 @@ const TimeTracking = () => {
   const fetchCurrentStatus = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:3000/api/attendance/me/today', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await axios.get('/attendance/me/today'); // Using your instance
 
       if (res.data) {
-        setIsPunchedIn(!!res.data.checkIn && !res.data.checkOut);
-        setStatus(res.data.checkIn && !res.data.checkOut ? 'Working' : 'Inactive');
+        const currentlyIn = !!res.data.checkIn && !res.data.checkOut;
+        setIsPunchedIn(currentlyIn);
+        setStatus(currentlyIn ? 'Working' : 'Inactive');
         setPunchInTime(res.data.checkIn ? new Date(res.data.checkIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--');
         setTodayTotal(res.data.workHours ? `${res.data.workHours}h` : '0h 0m');
       }
@@ -68,42 +51,15 @@ const TimeTracking = () => {
     }
   };
 
-  // --- Manual Punch Fallback ---
   const handleManualPunch = async () => {
-    // Determine action based on current state
     const action = isPunchedIn ? 'OUT' : 'IN';
-    
     if (!window.confirm(`Confirm Manual Punch ${action}?`)) return;
 
     try {
       setPunchLoading(true);
-      const token = localStorage.getItem('token');
-      
-      // We call the unified /punch endpoint we created in the controller
-      const res = await axios.post(`http://localhost:3000/api/attendance/punch`, 
-        { stationId: staticStationId },
-        { headers: { Authorization: `Bearer ${token}` }}
-      );
-
-      // Refresh the UI data from the server response
-      if (res.data.record) {
-        const rec = res.data.record;
-        // If the record has a checkIn but NO checkOut, the user is "In"
-        const currentlyIn = !!rec.checkIn && !rec.checkOut;
-        
-        setIsPunchedIn(currentlyIn);
-        setStatus(currentlyIn ? 'Working' : 'Inactive');
-        setPunchInTime(new Date(rec.checkIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }));
-        
-        // If they just punched out, update the total hours
-        if (rec.workHours) {
-          setTodayTotal(`${rec.workHours}h`);
-        }
-      }
-
-      // Final safety sync to ensure UI matches Database
+      const res = await axios.post(`/attendance/punch`, { stationId: staticStationId });
       await fetchCurrentStatus();
-      
+      alert(res.data.message);
     } catch (err) {
       alert(err.response?.data?.message || "Punch failed");
     } finally {
@@ -111,11 +67,13 @@ const TimeTracking = () => {
     }
   };
 
-  // Replace 'YourBotUsername' with your actual bot's username (without the @)
-  const botUsername = "HRMS_Attendance_Bot"; 
-  const qrValue = `https://t.me/${botUsername}?start=COMPANY-MAIN-STATION-001`;
+  const handlePrint = () => {
+    window.print();
+  };
 
-  // --- Styling Constants ---
+  const botUsername = "HRMS_Attendance_Bot"; 
+  const qrValue = `https://t.me/${botUsername}?start=${staticStationId}`;
+
   const titleText = isDark ? 'text-white' : 'text-slate-900';
   const subText = isDark ? 'text-slate-400' : 'text-slate-500';
   const cardClass = `transition-all duration-300 border rounded-[2rem] ${
@@ -131,8 +89,29 @@ const TimeTracking = () => {
   return (
     <main className={`flex-1 overflow-y-auto p-6 transition-colors duration-500 ${isDark ? 'bg-[#020617]' : 'bg-[#f1f5f9]'}`}>
       
-      {/* Header */}
-      <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+      {/* --- PRINT ONLY STYLES --- */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          body * { visibility: hidden; background: white !important; }
+          #printable-qr-area, #printable-qr-area * { visibility: visible; }
+          #printable-qr-area {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: white !important;
+            color: black !important;
+          }
+          .no-print { display: none !important; }
+        }
+      `}} />
+
+      <div className="no-print mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <nav className={`text-[10px] font-black uppercase tracking-[0.3em] mb-2 ${isDark ? 'text-purple-500' : 'text-indigo-600'}`}>
             Employee Portal &nbsp; • &nbsp; Time Tracking
@@ -146,11 +125,9 @@ const TimeTracking = () => {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        
-        {/* SECTION 1: LIVE CLOCK & MANUAL PUNCH */}
-        <div className="xl:col-span-2 space-y-6">
+        <div className="xl:col-span-2 space-y-6 no-print">
+          {/* ... Shift Management Card ... */}
           <div className={`${cardClass} p-8 md:p-12 relative overflow-hidden shadow-2xl shadow-black/20`}>
-            {/* Background Decoration */}
             <div className={`absolute -top-10 -right-10 opacity-[0.03] pointer-events-none ${isDark ? 'text-white' : 'text-slate-900'}`}>
               <Clock size={320} />
             </div>
@@ -192,7 +169,6 @@ const TimeTracking = () => {
               </div>
             </div>
 
-            {/* Stats Row */}
             <div className={`grid grid-cols-1 sm:grid-cols-3 gap-8 mt-16 pt-10 border-t ${isDark ? 'border-white/5' : 'border-slate-100'}`}>
               <div className="space-y-1">
                 <div className={`text-[10px] font-black uppercase tracking-[0.2em] ${subText}`}>Shift Entry</div>
@@ -211,7 +187,6 @@ const TimeTracking = () => {
             </div>
           </div>
 
-          {/* Security Policy Card */}
           <div className={`${cardClass} p-8`}>
             <div className="flex items-center gap-3 mb-8">
               <div className={`p-2 rounded-lg ${isDark ? 'bg-purple-500/10 text-purple-500' : 'bg-indigo-50 text-indigo-600 border border-indigo-100'}`}>
@@ -226,7 +201,7 @@ const TimeTracking = () => {
                   <Bot size={14} /> Telegram Sync
                 </div>
                 <p className={`text-xs leading-relaxed ${subText}`}>
-                  Your Telegram must be verified with your company email. Once linked, simply scan the QR to punch.
+                  Your Telegram must be verified with your company email. Once linked, scan the QR to punch.
                 </p>
               </div>
               <div className={`p-6 rounded-2xl border ${isDark ? 'bg-white/2 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
@@ -241,42 +216,36 @@ const TimeTracking = () => {
           </div>
         </div>
 
-        {/* SECTION 2: THE QR SCAN POINT */}
+        {/* --- QR SECTION --- */}
         <div className="space-y-6">
-          <div className={`${cardClass} p-8 flex flex-col items-center text-center`}>
+          <div id="printable-qr-area" className={`${cardClass} p-8 flex flex-col items-center text-center`}>
             <div className="mb-8">
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4 ${isDark ? 'bg-white/5 border border-white/10' : 'bg-slate-100'}`}>
+              <div className={`no-print w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4 ${isDark ? 'bg-white/5 border border-white/10' : 'bg-slate-100'}`}>
                 <Printer size={24} className={isDark ? "text-purple-400" : "text-indigo-600"} />
               </div>
-              <h3 className={`font-black text-xl tracking-tight ${titleText}`}>Station QR</h3>
-              <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${subText}`}>Scan via Telegram Bot</p>
+              <h3 className={`font-black text-xl tracking-tight ${titleText}`}>Station QR Entrance</h3>
+              <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${subText}`}>Scan via Telegram Bot to Punch</p>
             </div>
 
-            {/* QR Code Container */}
-            <div className="p-8 bg-white rounded-[2.5rem] mb-8 shadow-2xl ring-8 ring-slate-100/50">
-              <QRCodeSVG 
-                value={qrValue}
-                size={180}
-                level={"H"}
-                includeMargin={false}
-              />
+            <div className="p-8 bg-white rounded-[2.5rem] mb-8 shadow-2xl ring-8 ring-slate-100/50 print:ring-0 print:shadow-none">
+              <QRCodeSVG value={qrValue} size={220} level={"H"} includeMargin={false} />
             </div>
 
             <div className="w-full space-y-4">
                 <button 
-                  onClick={() => window.print()}
-                  className="flex items-center justify-center gap-3 w-full py-4 bg-[#7c3aed] text-white rounded-2xl font-black text-xs hover:bg-[#6d28d9] transition-all"
+                  onClick={handlePrint}
+                  className="no-print flex items-center justify-center gap-3 w-full py-4 bg-[#7c3aed] text-white rounded-2xl font-black text-xs hover:bg-[#6d28d9] transition-all"
                 >
                   <Printer size={18} /> PRINT FOR ENTRANCE
                 </button>
                 <div className={`p-4 rounded-2xl border flex flex-col items-center gap-1 ${isDark ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'}`}>
                     <div className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">System Online</div>
-                    <div className={`text-[11px] font-mono font-bold ${isDark ? 'text-emerald-200/50' : 'text-emerald-700'}`}>STATION_001_ACTIVE</div>
+                    <div className={`text-[11px] font-mono font-bold ${isDark ? 'text-emerald-200/50' : 'text-emerald-700'}`}>{staticStationId}</div>
                 </div>
             </div>
           </div>
 
-          <div className={`${cardClass} p-6 flex items-center gap-5 border-l-4 ${isDark ? 'border-l-purple-500' : 'border-l-indigo-600'}`}>
+          <div className={`no-print ${cardClass} p-6 flex items-center gap-5 border-l-4 ${isDark ? 'border-l-purple-500' : 'border-l-indigo-600'}`}>
             <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${isDark ? 'bg-purple-500/10 text-purple-500' : 'bg-indigo-50 text-indigo-600'}`}>
               <CheckCircle2 size={28} />
             </div>
@@ -286,7 +255,6 @@ const TimeTracking = () => {
             </div>
           </div>
         </div>
-
       </div>
     </main>
   );

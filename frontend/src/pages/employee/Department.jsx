@@ -1,34 +1,46 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FolderTree, 
   User, 
   ArrowRight,
   ShieldCheck,
-  Info
+  Info,
+  Loader2
 } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
+import api from '../../utils/axiosConfig'; // Ensure this points to your axios instance
 
 const Department = () => {
-  // --- Theme Logic via useOutletContext ---
+  // --- Theme Logic ---
   const { theme } = useOutletContext();
   const isDark = theme === 'dark';
 
-  // --- Current User Context ---
-  // In a real application, this ID would come from your Auth system/JWT
-  const currentUser = {
-    id: 'EMP001',
-    name: 'John Doe'
-  };
+  // --- State for Database Data ---
+  const [myDept, setMyDept] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // --- Mock Data ---
-  const allDepartments = [
-    { id: 1, name: 'Executive', description: 'Company leadership & Strategy', parent: 'No Parent', manager: 'John Smith', managerId: 'EMP001' },
-    { id: 2, name: 'Finance', description: 'Accounts and financial planning', parent: 'No Parent', manager: 'Sarah Jenkins', managerId: 'EMP005' },
-    { id: 4, name: 'Engineering', description: 'Product and Infrastructure', parent: 'Executive', manager: 'Michael Chen', managerId: 'EMP003' },
-  ];
+  // --- Fetch Logic using your Backend Logic ---
+  useEffect(() => {
+    const fetchMyDepartment = async () => {
+      try {
+        setLoading(true);
+        // Using your defined route: router.get('/departments', protect, deptController.getAllDepartments);
+        // Your controller logic filters by user.departmentId automatically
+        const res = await api.get('/auth/my-department');
+        
+        // Since Prisma findMany returns an array, we take the first element
+        if (res.data && res.data.length > 0) {
+          setMyDept(res.data[0]);
+        }
+      } catch (error) {
+        console.error("Error fetching department:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // --- Logic: Find only the department associated with John Doe ---
-  const myDept = allDepartments.find(dept => dept.managerId === currentUser.id);
+    fetchMyDepartment();
+  }, []);
 
   // --- Theme Styles ---
   const styles = {
@@ -40,16 +52,30 @@ const Department = () => {
     textMuted: isDark ? 'text-[#94a3b8]' : 'text-[#64748b]',
   };
 
+  // --- Loading State ---
+  if (loading) {
+    return (
+      <div className={`flex-1 flex flex-col items-center justify-center ${styles.bgBody}`}>
+        <Loader2 className="animate-spin text-[#7c3aed] mb-4" size={40} />
+        <p className={`text-xs font-black uppercase tracking-widest ${styles.textMuted}`}>Loading Assignment...</p>
+      </div>
+    );
+  }
+
+  // --- Error/Empty State ---
   if (!myDept) {
     return (
-      <div className={`flex-1 p-6 ${styles.bgBody} ${styles.textMain}`}>
-        No department information found for your account.
+      <div className={`flex-1 flex flex-col items-center justify-center p-6 ${styles.bgBody} ${styles.textMain}`}>
+        <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-center">
+            <h2 className="font-bold text-amber-500">Unassigned Unit</h2>
+            <p className={`text-sm ${styles.textMuted} mt-1`}>Your account is not currently linked to a specific department. Please contact HR.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <main className={`flex-1 overflow-y-auto p-6 ${styles.bgBody} transition-colors duration-300`}>
+    <main className={`flex-1 overflow-y-auto p-6 ${styles.bgBody} transition-colors duration-300 min-h-screen`}>
       {/* Breadcrumb */}
       <div className={`text-[11px] font-bold uppercase tracking-widest ${styles.textMuted} mb-2`}>
         Organization &gt; My Department
@@ -62,7 +88,7 @@ const Department = () => {
       </div>
 
       <div className="max-w-4xl">
-        <div className={`${styles.bgCard} border ${styles.border} rounded-2xl p-8 relative overflow-hidden`}>
+        <div className={`${styles.bgCard} border ${styles.border} rounded-2xl p-8 relative overflow-hidden shadow-2xl shadow-black/20`}>
           {/* Subtle Background Icon */}
           <FolderTree size={120} className="absolute -right-8 -bottom-8 opacity-5 text-[#7c3aed]" />
 
@@ -78,10 +104,11 @@ const Department = () => {
                 <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
                   Active Unit
                 </span>
+                
               </div>
               
               <p className={`text-lg ${styles.textMuted} mb-6 leading-relaxed max-w-2xl`}>
-                {myDept.description}
+                {myDept.description || "No description available for this department."}
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -91,10 +118,10 @@ const Department = () => {
                     Reporting Line
                   </span>
                   <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-sm font-bold bg-[#7c3aed]/10 text-[#7c3aed]`}>
-                    {myDept.parent === 'No Parent' ? 'Top Level Unit' : (
+                    {!myDept.parent ? 'Top Level Unit' : (
                       <>
                         <ArrowRight size={14} />
-                        {myDept.parent}
+                        {myDept.parent.name}
                       </>
                     )}
                   </div>
@@ -107,7 +134,7 @@ const Department = () => {
                   </span>
                   <div className={`flex items-center gap-2 font-bold ${styles.textMain}`}>
                     <User size={16} className="text-[#7c3aed]" />
-                    {myDept.manager}
+                    {myDept.manager || "Not Assigned"}
                   </div>
                 </div>
               </div>

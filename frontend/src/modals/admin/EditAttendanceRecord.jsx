@@ -8,7 +8,7 @@ import {
   History,
   Loader2
 } from 'lucide-react';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 
 const EditAttendanceRecord = ({ isOpen, onClose, theme = 'dark', data, onRefresh }) => {
   const [formData, setFormData] = useState({
@@ -20,30 +20,37 @@ const EditAttendanceRecord = ({ isOpen, onClose, theme = 'dark', data, onRefresh
   });
   const [loading, setLoading] = useState(false);
 
+  // Helper to resolve name from multiple possible data structures
+  const displayName = data?.employeeName || data?.name || data?.employee?.name || "Search Employee";
+
   // Sync state when record is selected
   useEffect(() => {
     if (data && isOpen) {
       setFormData({
-        checkIn: data.checkIn !== '--:--' ? convertTo24Hour(data.checkIn) : '09:00',
-        checkOut: data.checkOut !== '--:--' ? convertTo24Hour(data.checkOut) : '17:00',
-        status: data.status || 'On Time',
-        location: 'Main Office',
-        adjustmentReason: ''
+        checkIn: (data.checkIn && data.checkIn !== '--:--') ? convertTo24Hour(data.checkIn) : '09:00',
+        checkOut: (data.checkOut && data.checkOut !== '--:--') ? convertTo24Hour(data.checkOut) : '17:00',
+        status: data.status || 'Present',
+        location: data.location || 'Office',
+        adjustmentReason: data.notes || ''
       });
     }
   }, [data, isOpen]);
 
-  // Helper to convert "08:55 AM" or "14:20" to "HH:mm" for input[type="time"]
+  // Helper to convert time formats
   function convertTo24Hour(timeStr) {
-    if (!timeStr || timeStr === '--:--' || timeStr === '-') return '09:00';
-    // If it's already 24h format (HH:mm)
-    if (!timeStr.includes('AM') && !timeStr.includes('PM')) return timeStr;
+    if (!timeStr || timeStr === '--:--' || timeStr === '-' || timeStr === 'Invalid Date') return '09:00';
+    if (/^\d{2}:\d{2}$/.test(timeStr)) return timeStr;
+    if (timeStr.includes('T')) return timeStr.split('T')[1].substring(0, 5);
 
-    const [time, modifier] = timeStr.split(' ');
-    let [hours, minutes] = time.split(':');
-    if (hours === '12') hours = '00';
-    if (modifier === 'PM') hours = parseInt(hours, 10) + 12;
-    return `${String(hours).padStart(2, '0')}:${minutes}`;
+    try {
+      const [time, modifier] = timeStr.split(' ');
+      let [hours, minutes] = time.split(':');
+      if (hours === '12') hours = '00';
+      if (modifier === 'PM') hours = parseInt(hours, 10) + 12;
+      return `${String(hours).padStart(2, '0')}:${minutes}`;
+    } catch (e) {
+      return '09:00';
+    }
   }
 
   const handleUpdate = async (e) => {
@@ -52,28 +59,28 @@ const EditAttendanceRecord = ({ isOpen, onClose, theme = 'dark', data, onRefresh
     
     try {
       const token = localStorage.getItem('token');
+      const rawDate = data.date || new Date().toISOString();
+      const baseDate = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
       
-      // Combine the original date with the new times for Prisma
-      // Assuming data.date is "YYYY-MM-DD"
-      const updatedCheckIn = new Date(`${data.date}T${formData.checkIn}:00`).toISOString();
-      const updatedCheckOut = new Date(`${data.date}T${formData.checkOut}:00`).toISOString();
+      // Ensure "Present" maps to "On Time" for the DB
+      const finalStatus = formData.status === 'Present' ? 'On Time' : formData.status;
 
       const payload = {
-        checkIn: updatedCheckIn,
-        checkOut: updatedCheckOut,
-        status: formData.status,
-        notes: formData.adjustmentReason
+        status: finalStatus,
+        notes: formData.adjustmentReason,
+        checkIn: finalStatus === 'Absent' ? null : new Date(`${baseDate}T${formData.checkIn}:00`).toISOString(),
+        checkOut: finalStatus === 'Absent' ? null : new Date(`${baseDate}T${formData.checkOut}:00`).toISOString()
       };
 
-      await axios.put(`http://localhost:3000/api/attendance/${data.id}`, payload, {
+      await axios.put(`http://localhost:5000/api/attendance/${data.id}`, payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
       if (onRefresh) onRefresh();
       onClose();
     } catch (err) {
-      console.error("Update Error:", err.response?.data);
-      alert(err.response?.data?.message || "Failed to update record");
+      const errorResponse = err.response?.data?.message || err.message || "Failed to update record";
+      alert(errorResponse);
     } finally {
       setLoading(false);
     }
@@ -106,7 +113,7 @@ const EditAttendanceRecord = ({ isOpen, onClose, theme = 'dark', data, onRefresh
             </div>
             <div>
               <h3 className="font-bold text-lg">Edit Attendance Log</h3>
-              <p className="text-xs text-[#94a3b8]">Adjusting record for {data.name}</p>
+              <p className="text-xs text-[#94a3b8]">Adjusting record for {displayName}</p>
             </div>
           </div>
           <button onClick={onClose} className="text-[#94a3b8] hover:text-red-500 transition-colors">
@@ -121,23 +128,25 @@ const EditAttendanceRecord = ({ isOpen, onClose, theme = 'dark', data, onRefresh
             <div className={`flex items-center justify-between p-4 rounded-xl ${isDark ? 'bg-white/5' : 'bg-slate-50'}`}>
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-[#7c3aed] flex items-center justify-center text-white font-black">
-                  {data.name?.charAt(0)}
+                  {displayName.charAt(0)}
                 </div>
                 <div>
-                  <div className="text-sm font-bold">{data.name}</div>
+                  <div className="text-sm font-bold">{displayName}</div>
                   <div className="text-[10px] text-[#94a3b8] flex items-center gap-1">
-                    <Calendar size={10}/> {data.date}
+                    <Calendar size={10}/> {(data.date || new Date().toISOString()).split('T')[0]}
                   </div>
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-[10px] text-[#94a3b8] uppercase font-bold">Current Status</div>
-                <div className="text-xs font-bold text-amber-500">{data.status}</div>
+                <div className={`text-xs font-bold ${data.status === 'Absent' ? 'text-red-500' : 'text-amber-500'}`}>
+                  {data.status || 'N/A'}
+                </div>
               </div>
             </div>
 
-            {/* Time Adjustments */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Time Adjustments - Hidden if Absent */}
+            <div className={`grid grid-cols-2 gap-4 transition-opacity ${formData.status === 'Absent' ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
               <div>
                 <label className={styles.label}>Adjust Check In</label>
                 <div className="relative">
@@ -147,7 +156,7 @@ const EditAttendanceRecord = ({ isOpen, onClose, theme = 'dark', data, onRefresh
                     value={formData.checkIn}
                     className={`w-full border rounded-xl p-3 pl-10 text-sm outline-none transition-all ${styles.input}`}
                     onChange={(e) => setFormData({...formData, checkIn: e.target.value})}
-                    required
+                    required={formData.status !== 'Absent'}
                   />
                 </div>
               </div>
@@ -160,24 +169,24 @@ const EditAttendanceRecord = ({ isOpen, onClose, theme = 'dark', data, onRefresh
                     value={formData.checkOut}
                     className={`w-full border rounded-xl p-3 pl-10 text-sm outline-none transition-all ${styles.input}`}
                     onChange={(e) => setFormData({...formData, checkOut: e.target.value})}
-                    required
+                    required={formData.status !== 'Absent'}
                   />
                 </div>
               </div>
             </div>
 
-            {/* Status Override */}
+            {/* Status Override - Updated Options */}
             <div>
               <label className={styles.label}>Override Status</label>
               <select 
                 className={`w-full border rounded-xl p-3 text-sm font-bold outline-none transition-all ${styles.input}`}
-                value={formData.status}
+                value={formData.status === 'On Time' ? 'Present' : formData.status}
                 onChange={(e) => setFormData({...formData, status: e.target.value})}
               >
                 <option value="On Time">On Time</option>
-                <option value="Late">Late Arrival</option>
-                <option value="Overtime">Overtime</option>
-                <option value="Absent">Absent (Manual)</option>
+                <option value="Late">Late</option>
+                <option value="Half Day">Half Day</option>
+                <option value="Absent">Absent</option>
               </select>
             </div>
 
@@ -187,7 +196,7 @@ const EditAttendanceRecord = ({ isOpen, onClose, theme = 'dark', data, onRefresh
               <textarea 
                 required
                 rows="3"
-                placeholder="e.g., Sensor error, manual entry correction..."
+                placeholder="Reason for manual adjustment..."
                 className={`w-full border rounded-xl p-3 text-sm outline-none transition-all resize-none ${styles.input}`}
                 value={formData.adjustmentReason}
                 onChange={(e) => setFormData({...formData, adjustmentReason: e.target.value})}
@@ -198,7 +207,7 @@ const EditAttendanceRecord = ({ isOpen, onClose, theme = 'dark', data, onRefresh
             <div className="flex gap-3 p-3 bg-amber-500/5 border border-amber-500/10 rounded-xl">
               <AlertCircle size={16} className="text-amber-500 shrink-0 mt-0.5" />
               <p className="text-[10px] text-amber-500/80 leading-relaxed">
-                Manual adjustments are logged for audit purposes. This will update the total work hours automatically based on the new times.
+                Manual adjustments are logged for audit purposes. This will update work duration based on the new status and times.
               </p>
             </div>
           </div>

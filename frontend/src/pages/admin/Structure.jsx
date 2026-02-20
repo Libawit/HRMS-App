@@ -1,373 +1,471 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { 
-  Users, GitMerge, Search, Filter, 
-  Download, Plus, MoreVertical, Edit, 
-  Trash2, Eye, ShieldCheck, Map, UserPlus, 
-  AlertCircle, RefreshCcw, ChevronRight, Share2,
-  ChevronLeft, ChevronDown
+  Users, GitMerge, Search, Filter, Loader2,
+  Plus, Edit, Trash2, Eye, ShieldCheck, 
+  RefreshCcw, ChevronRight, Share2,
+  ChevronLeft, ChevronDown, X
 } from 'lucide-react';
+import axios from '../../utils/axiosConfig';
 import { useOutletContext } from 'react-router-dom';
 
 // Import Modals
 import EditStructure from '../../modals/admin/EditStructure';
 import ViewStructure from '../../modals/admin/ViewStructure';
 
+const API_BASE = "http://localhost:5000/api";
+
 const Structure = () => {
-  // Logic: Sync with the global layout theme
-  const { theme } = useOutletContext();
+  const { theme } = useOutletContext(); 
   const isDark = theme === 'dark';
 
+  // --- State ---
   const [activeTab, setActiveTab] = useState('assignment');
   const [selectedDept, setSelectedDept] = useState('Executive');
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // --- Pagination State ---
+  const [departments, setDepartments] = useState([]); 
+  const [currentDepartment, setCurrentDepartment] = useState('All');
+  const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
-  // Inline Form State (Add/Update Hierarchy)
+  // --- Search & Data State ---
+  const [users, setUsers] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [empSearchQuery, setEmpSearchQuery] = useState('');
+  const [supSearchQuery, setSupSearchQuery] = useState('');
+  const [isEmpDropdownOpen, setIsEmpDropdownOpen] = useState(false);
+  const [isSupDropdownOpen, setIsSupDropdownOpen] = useState(false);
+
   const [newAssignment, setNewAssignment] = useState({
-    employeeName: '',
-    supervisorName: ''
+    employeeId: '',
+    supervisorId: ''
   });
 
-  // Modal States
+  // Refs for closing dropdowns when clicking outside
+  const empDropdownRef = useRef(null);
+  const supDropdownRef = useRef(null);
+
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [selectedRelationship, setSelectedRelationship] = useState(null);
 
-  // Core Data State
-  const [assignments, setAssignments] = useState([
-    { id: 1, emp: "Thomas Clark", dept: "Finance", pos: "Accountant", role: "Supervisor", supervisor: "Sarah Johnson", img: "https://i.pravatar.cc/32?img=11" },
-    { id: 2, emp: "Sarah Johnson", dept: "HR", pos: "HR Director", role: "Admin", supervisor: "John Smith", img: "https://i.pravatar.cc/32?img=5" },
-    { id: 3, emp: "Kevin Hart", dept: "IT", pos: "DevOps", role: "Staff", supervisor: "Michael Chen", img: "https://i.pravatar.cc/32?img=8" },
-    { id: 4, emp: "John Smith", dept: "Executive", pos: "CEO", role: "Admin", supervisor: "None", img: "https://i.pravatar.cc/32?img=12" },
-    { id: 5, emp: "Michael Chen", dept: "IT", pos: "Lead Dev", role: "Supervisor", supervisor: "John Smith", img: "https://i.pravatar.cc/32?img=13" },
-    { id: 6, emp: "Emily Davis", dept: "Finance", pos: "Junior Accountant", role: "Staff", supervisor: "Thomas Clark", img: "https://i.pravatar.cc/32?img=1" },
-    { id: 7, emp: "Robert Wilson", dept: "IT", pos: "Backend Dev", role: "Staff", supervisor: "Michael Chen", img: "https://i.pravatar.cc/32?img=2" },
-    { id: 8, emp: "Sophia Brown", dept: "HR", pos: "Recruiter", role: "Staff", supervisor: "Sarah Johnson", img: "https://i.pravatar.cc/32?img=3" },
-  ]);
+  // --- 1. Close dropdowns on outside click ---
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (empDropdownRef.current && !empDropdownRef.current.contains(event.target)) {
+        setIsEmpDropdownOpen(false);
+      }
+      if (supDropdownRef.current && !supDropdownRef.current.contains(event.target)) {
+        setIsSupDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
-  // --- Handlers ---
-  const handleUpdateHierarchy = () => {
-    if (!newAssignment.employeeName || !newAssignment.supervisorName) {
-      alert("Please select both an employee and a supervisor.");
-      return;
+  // --- API Fetching ---
+
+const fetchAllData = useCallback(async () => {
+  if (loading) return;
+  setLoading(true);
+  try {
+    // 1. Grab the token
+    const token = localStorage.getItem('token');
+    
+    // 2. Set up the configuration with the Authorization header
+    const config = {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    };
+
+    // 3. Pass the config to every request
+    const [structRes, userRes, deptRes] = await Promise.all([
+      axios.get(`${API_BASE}/structure`, config),
+      axios.get(`${API_BASE}/auth/users`, config),
+      axios.get(`${API_BASE}/auth/departments`, config)
+    ]);
+    
+    setAssignments(Array.isArray(structRes.data) ? structRes.data : []);
+    setUsers(Array.isArray(userRes.data) ? userRes.data : []);
+    setDepartments(deptRes.data);
+    
+    if (deptRes.data.length > 0) {
+      setSelectedDept(deptRes.data[0].name);
     }
-    const updated = assignments.map(asg => 
-      asg.emp === newAssignment.employeeName 
-      ? { ...asg, supervisor: newAssignment.supervisorName } 
-      : asg
-    );
-    setAssignments(updated);
-    setNewAssignment({ employeeName: '', supervisorName: '' });
-    setCurrentPage(1);
-  };
+  } catch (err) {
+    console.error("Fetch failed", err);
+    // Optional: If err.response.status === 401, redirect to login
+  } finally {
+    setLoading(false);
+  }
+}, [loading]); // Added loading to dependency for safety
 
-  const handleSaveEdit = (updatedData) => {
-    setAssignments(assignments.map(asg => asg.id === updatedData.id ? updatedData : asg));
-    setIsEditOpen(false);
-  };
+  useEffect(() => {
+  fetchAllData();
+}, []);
 
-  const handleDelete = (id) => {
-    if(window.confirm("Remove this reporting relationship?")) {
-      const updatedFiltered = assignments.filter(a => a.id !== id);
-      setAssignments(updatedFiltered);
-      const maxPage = Math.ceil(updatedFiltered.length / itemsPerPage);
-      if (currentPage > maxPage && maxPage > 0) setCurrentPage(maxPage);
+  const getDisplayName = (user) => {
+    if (!user) return 'Unknown';
+    if (user.name) return user.name;
+    if (user.firstName || user.lastName) {
+        return `${user.firstName || ''} ${user.lastName || ''}`.trim();
     }
+    return user.email?.split('@')[0] || 'Unknown User';
   };
 
-  // --- Filtering & Pagination Logic ---
+  // Helper to resolve Department Name across different data structures
+  const resolveDeptName = (userOrItem) => {
+    if (userOrItem?.department?.name) return userOrItem.department.name;
+    if (userOrItem?.departmentRel?.name) return userOrItem.departmentRel.name;
+    
+    const deptId = userOrItem?.departmentId || userOrItem?.employee?.departmentId;
+    if (deptId && departments.length > 0) {
+        const found = departments.find(d => String(d.id) === String(deptId));
+        if (found) return found.name;
+    }
+
+    if (userOrItem?.employee?.department?.name) return userOrItem.employee.department.name;
+    if (userOrItem?.employee?.departmentRel?.name) return userOrItem.employee.departmentRel.name;
+
+    return 'N/A';
+  };
+
   const filteredAssignments = useMemo(() => {
-    return assignments.filter(a => 
-      a.emp.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      a.dept.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [assignments, searchTerm]);
+    return assignments.filter(item => {
+      const empDeptId = item.departmentId || item.employee?.departmentId || item.employee?.departmentRel?.id;
+      const matchesDept = currentDepartment === 'All' || String(empDeptId) === String(currentDepartment);
+      const name = getDisplayName(item.employee).toLowerCase();
+      const search = searchTerm.toLowerCase();
+      return matchesDept && name.includes(search);
+    });
+  }, [assignments, searchTerm, currentDepartment]);
+
+  const deptMembers = useMemo(() => {
+    return assignments.filter(item => {
+      const deptName = resolveDeptName(item);
+      return deptName === selectedDept;
+    });
+  }, [assignments, selectedDept, departments]);
 
   const totalPages = Math.ceil(filteredAssignments.length / itemsPerPage);
-  
   const currentTableData = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     return filteredAssignments.slice(start, start + itemsPerPage);
   }, [filteredAssignments, currentPage]);
 
-  const deptMembers = assignments.filter(a => a.dept === selectedDept);
+  const handleUpdateHierarchy = async () => {
+  if (!newAssignment.employeeId) return alert("Please select an employee");
+  try {
+    const token = localStorage.getItem('token');
+    
+    await axios.post(`${API_BASE}/structure/sync`, {
+      employeeId: newAssignment.employeeId,
+      managerId: newAssignment.supervisorId || 'none'
+    }, {
+      headers: { Authorization: `Bearer ${token}` } // Pass token here
+    });
+
+    setEmpSearchQuery('');
+    setSupSearchQuery('');
+    setNewAssignment({ employeeId: '', supervisorId: '' });
+    fetchAllData(); 
+  } catch (err) {
+    alert(err.response?.data?.message || "Sync failed");
+  }
+};
+
+  const handleDelete = async (id) => {
+  if (window.confirm("Remove this reporting relationship?")) {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`${API_BASE}/structure/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      await fetchAllData();
+    } catch (err) {
+      console.error("Delete failed", err.response?.data);
+      alert(err.response?.data?.message || "Delete failed");
+    }
+  }
+};
 
   const styles = {
-    card: `${isDark ? 'bg-[#0b1220] border-white/10 shadow-2xl' : 'bg-white border-slate-200 shadow-sm'} border rounded-[3rem] overflow-hidden transition-all duration-500`,
-    tabBtn: (active) => `py-6 text-[11px] font-black uppercase tracking-[0.2em] transition-all border-b-2 px-8 ${
-      active ? 'text-[#7c3aed] border-[#7c3aed]' : `border-transparent ${isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600'}`
-    }`,
+    card: `${isDark ? 'bg-[#0b1220] border-white/10 shadow-2xl' : 'bg-white border-slate-200 shadow-sm'} border rounded-[2.5rem] overflow-hidden transition-all duration-500`,
     input: `w-full p-4 rounded-2xl border transition-all appearance-none text-sm font-bold outline-none focus:border-[#7c3aed] focus:ring-4 focus:ring-[#7c3aed]/10 ${
         isDark ? 'bg-[#0f1623] border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
     }`,
-    label: `text-[10px] font-black uppercase tracking-[0.2em] mb-2.5 block ${isDark ? 'text-slate-500' : 'text-slate-400'}`
+    tabBtn: (active) => `py-5 text-xs font-black uppercase tracking-widest transition-all border-b-2 px-8 ${
+      active ? 'text-[#7c3aed] border-[#7c3aed]' : `border-transparent ${isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600'}`
+    }`,
+    dropdown: `absolute z-50 w-full mt-2 rounded-2xl border shadow-2xl overflow-hidden max-h-60 overflow-y-auto ${isDark ? 'bg-[#1e293b] border-white/10' : 'bg-white border-slate-200'}`
   };
 
+  const textMain = isDark ? 'text-white' : 'text-slate-900';
+  const textMuted = isDark ? 'text-slate-500' : 'text-slate-400';
+
   return (
-    <main className={`flex-1 p-6 lg:p-10 min-h-screen transition-colors duration-500 ${isDark ? 'bg-[#020617]' : 'bg-[#f8fafc]'}`}>
-      {/* Header Area */}
+    <main className={`flex-1 p-6 md:p-10 min-h-screen ${isDark ? 'bg-[#020617]' : 'bg-[#f8fafc]'} overflow-y-auto`}>
       <div className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
           <p className="text-[11px] font-black text-[#7c3aed] uppercase tracking-[0.3em] mb-3">Organization &nbsp; • &nbsp; Hierarchy</p>
-          <h1 className={`text-4xl font-black tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>Structure & Flow</h1>
-        </div>
-        <div className="flex gap-4">
-          <button className={`flex items-center gap-2 border px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${isDark ? 'bg-white/5 border-white/10 text-slate-400 hover:text-white' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
-            <Share2 size={16}/> Share Structure
-          </button>
+          <h1 className={`text-4xl font-black tracking-tighter ${textMain}`}>Structure</h1>
         </div>
       </div>
 
       <div className={styles.card}>
-        {/* Tab Selection */}
-        <div className={`flex gap-4 px-8 border-b transition-colors ${isDark ? 'border-white/5 bg-white/2' : 'border-slate-100 bg-slate-50/50'} overflow-x-auto no-scrollbar`}>
+        <div className={`flex gap-4 px-8 border-b transition-colors ${isDark ? 'border-white/5 bg-white/2' : 'border-slate-100 bg-slate-50/50'}`}>
           <button onClick={() => setActiveTab('assignment')} className={styles.tabBtn(activeTab === 'assignment')}>
-            <div className="flex items-center gap-2 whitespace-nowrap"><Users size={18}/> Assignments</div>
+            <div className="flex items-center gap-2"><Users size={16}/> Assignment</div>
           </button>
           <button onClick={() => setActiveTab('relationships')} className={styles.tabBtn(activeTab === 'relationships')}>
-            <div className="flex items-center gap-2 whitespace-nowrap"><GitMerge size={18}/> Visual Tree</div>
+            <div className="flex items-center gap-2"><GitMerge size={16}/> Tree View</div>
           </button>
         </div>
 
-        <div className="p-8 lg:p-12">
+        <div className="p-8 lg:p-10">
           {activeTab === 'assignment' ? (
-            /* TAB 1: ASSIGNMENT INTERFACE */
-            <div className="space-y-10 animate-in fade-in duration-300">
-              
-              {/* Add/Update Quick Form */}
-              <div className={`p-8 lg:p-10 rounded-[2.5rem] border-2 border-dashed transition-all ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-200 bg-slate-50/50'}`}>
-                <div className="flex items-center gap-4 mb-8">
-                  <div className="w-12 h-12 rounded-2xl bg-[#7c3aed]/10 text-[#7c3aed] flex items-center justify-center">
-                    <UserPlus size={24}/>
+            <div className="space-y-10">
+              <div className={`p-8 rounded-[2.5rem] border-2 border-dashed ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-200 bg-slate-50'}`}>
+                <div className="flex flex-col md:flex-row gap-6 items-end">
+                  
+                  {/* Employee Dropdown */}
+                  <div className="flex-1 space-y-2 relative" ref={empDropdownRef}>
+                    <label className="text-[10px] font-black text-[#7c3aed] uppercase tracking-widest ml-1">Employee</label>
+                    <div className="relative">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                      <input 
+                        type="text" 
+                        placeholder="Search employee..." 
+                        className={styles.input + " pl-12"}
+                        value={empSearchQuery}
+                        onFocus={() => setIsEmpDropdownOpen(true)}
+                        onChange={(e) => {setEmpSearchQuery(e.target.value); setIsEmpDropdownOpen(true);}}
+                      />
+                    </div>
+                    {isEmpDropdownOpen && (
+                      <div className={styles.dropdown}>
+                        {users.filter(u => getDisplayName(u).toLowerCase().includes(empSearchQuery.toLowerCase())).map(user => (
+                          <button 
+                            key={user.id} 
+                            onClick={() => {
+                              setNewAssignment({...newAssignment, employeeId: user.id, supervisorId: ''}); 
+                              setEmpSearchQuery(getDisplayName(user)); 
+                              setSupSearchQuery(''); 
+                              setIsEmpDropdownOpen(false);
+                            }} 
+                            className={`w-full text-left p-4 hover:bg-[#7c3aed] hover:text-white transition-colors border-b last:border-0 ${isDark ? 'text-slate-300 border-white/5' : 'text-slate-700 border-slate-50'}`}
+                          >
+                            <div className="text-xs font-black">{getDisplayName(user)}</div>
+                            <div className={`text-[10px] font-bold opacity-70`}>
+                              ID: {user.employeeId || user.id}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <h3 className={`text-lg font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Configure Reporting Line</h3>
-                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Connect employees to their direct managers</p>
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
-                  <div className="space-y-1 relative">
-                    <label className={styles.label}>Subordinate</label>
+                  {/* Supervisor Dropdown */}
+                  <div className="flex-1 space-y-2 relative" ref={supDropdownRef}>
+                    <label className="text-[10px] font-black text-[#7c3aed] uppercase tracking-widest ml-1">Reports To</label>
                     <div className="relative">
-                      <select 
-                        value={newAssignment.employeeName}
-                        onChange={(e) => setNewAssignment({...newAssignment, employeeName: e.target.value})}
-                        className={styles.input}
-                      >
-                        <option value="">Choose Employee...</option>
-                        {assignments.map(a => <option key={a.id} value={a.emp}>{a.emp}</option>)}
-                      </select>
-                      <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-40"/>
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                        <input 
+                            type="text" 
+                            placeholder={newAssignment.employeeId ? "Search manager..." : "Select employee first"} 
+                            className={styles.input + " pl-12"}
+                            value={supSearchQuery}
+                            onFocus={() => setIsSupDropdownOpen(true)}
+                            onChange={(e) => {setSupSearchQuery(e.target.value); setIsSupDropdownOpen(true);}}
+                            disabled={!newAssignment.employeeId}
+                        />
                     </div>
+                    {isSupDropdownOpen && (
+                      <div className={styles.dropdown}>
+                        <button onClick={() => {setNewAssignment({...newAssignment, supervisorId: 'none'}); setSupSearchQuery('NONE'); setIsSupDropdownOpen(false);}} className="w-full text-left p-4 text-xs font-black text-red-400 hover:bg-red-500 hover:text-white border-b border-white/5">NONE (Independent)</button>
+                        {users.filter(u => {
+                            const nameMatch = getDisplayName(u).toLowerCase().includes(supSearchQuery.toLowerCase());
+                            const selectedEmp = users.find(e => e.id === newAssignment.employeeId);
+                            const deptMatch = selectedEmp ? String(u.departmentId) === String(selectedEmp.departmentId) : true;
+                            const isNotSelf = u.id !== newAssignment.employeeId;
+                            return nameMatch && deptMatch && isNotSelf;
+                        }).map(user => (
+                          <button 
+                            key={user.id} 
+                            onClick={() => {
+                              setNewAssignment({...newAssignment, supervisorId: user.id}); 
+                              setSupSearchQuery(getDisplayName(user)); 
+                              setIsSupDropdownOpen(false);
+                            }} 
+                            className={`w-full text-left p-4 hover:bg-[#7c3aed] hover:text-white transition-colors border-b last:border-0 ${isDark ? 'text-slate-300 border-white/5' : 'text-slate-700 border-slate-50'}`}
+                          >
+                            <div className="text-xs font-black">{getDisplayName(user)}</div>
+                            <div className={`text-[10px] font-bold opacity-70`}>
+                              ID: {user.employeeId || user.id}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div className="space-y-1 relative">
-                    <label className={styles.label}>Direct Supervisor</label>
-                    <div className="relative">
-                      <select 
-                        value={newAssignment.supervisorName}
-                        onChange={(e) => setNewAssignment({...newAssignment, supervisorName: e.target.value})}
-                        className={styles.input}
-                      >
-                        <option value="">Choose Manager...</option>
-                        <option value="None">Independent (Top Level)</option>
-                        {assignments.filter(a => a.role !== 'Staff').map(a => <option key={a.id} value={a.emp}>{a.emp}</option>)}
-                      </select>
-                      <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-40"/>
-                    </div>
-                  </div>
-                  <button onClick={handleUpdateHierarchy} className="bg-[#7c3aed] hover:bg-[#6d28d9] text-white px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all shadow-xl shadow-purple-500/20 flex items-center justify-center gap-2 active:scale-95">
-                    <RefreshCcw size={16}/> Sync Hierarchy
+
+                  <button onClick={handleUpdateHierarchy} className="bg-[#7c3aed] text-white px-10 py-4 rounded-2xl font-black text-[11px] hover:bg-[#6d28d9] transition-all shadow-xl shadow-purple-500/20 uppercase tracking-widest flex items-center gap-2">
+                    <RefreshCcw size={16}/> Sync
                   </button>
                 </div>
               </div>
 
-              {/* Assignments Table */}
-              <div className="space-y-6">
-                <div className="relative group">
+              {/* TOOLBAR */}
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="relative flex-1 group">
                   <Search className={`absolute left-5 top-1/2 -translate-y-1/2 transition-colors ${isDark ? 'text-slate-600 group-focus-within:text-[#7c3aed]' : 'text-slate-400'}`} size={20} />
                   <input 
                     type="text" 
-                    placeholder="Search structure by name, department or role..." 
+                    placeholder="Search table data..." 
                     className={`${styles.input} pl-14 py-5 text-base`}
                     value={searchTerm}
-                    onChange={(e) => {
-                      setSearchTerm(e.target.value);
-                      setCurrentPage(1);
-                    }}
+                    onChange={(e) => {setSearchTerm(e.target.value); setCurrentPage(1);}}
                   />
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-separate border-spacing-y-2">
-                    <thead>
-                      <tr className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'} uppercase tracking-[0.2em] font-black`}>
-                        <th className="pb-4 px-6">Employee</th>
-                        <th className="pb-4 px-6">Org Details</th>
-                        <th className="pb-4 px-6">Reporting Authority</th>
-                        <th className="pb-4 px-6 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {currentTableData.map(item => (
-                        <tr key={item.id} className={`group transition-all ${isDark ? 'hover:bg-white/3' : 'hover:bg-slate-50'}`}>
-                          <td className={`py-5 px-6 rounded-l-3xl border-y border-l transition-colors ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-white'}`}>
-                            <div className="flex items-center gap-4">
-                              <img src={item.img} className="w-12 h-12 rounded-2xl border border-white/10 group-hover:scale-110 transition-transform" alt=""/>
-                              <span className={`text-sm font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{item.emp}</span>
-                            </div>
-                          </td>
-                          <td className={`py-5 px-6 border-y transition-colors ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-white'}`}>
-                            <p className={`text-xs font-bold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{item.dept}</p>
-                            <span className="text-[10px] font-black uppercase tracking-wider text-[#7c3aed]">{item.pos}</span>
-                          </td>
-                          <td className={`py-5 px-6 border-y transition-colors ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-white'}`}>
-                            {item.supervisor === "None" ? (
-                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-500/5 px-3 py-1.5 rounded-lg border border-slate-500/10 italic">Lvl 0: Independent</span>
-                            ) : (
-                              <div className="flex items-center gap-2.5 bg-[#7c3aed]/10 px-4 py-2 rounded-xl border border-[#7c3aed]/10 w-fit">
-                                <ShieldCheck size={14} className="text-[#7c3aed]"/>
-                                <span className="text-[11px] font-black uppercase tracking-tight text-[#7c3aed]">{item.supervisor}</span>
-                              </div>
-                            )}
-                          </td>
-                          <td className={`py-5 px-6 rounded-r-3xl border-y border-r text-right transition-colors ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-white'}`}>
-                            <div className="flex justify-end gap-2">
-                              <button 
-                                onClick={() => { setSelectedRelationship(item); setIsViewOpen(true); }} 
-                                className={`p-2.5 rounded-xl border transition-all ${isDark ? 'border-white/5 text-slate-500 hover:text-white hover:bg-[#7c3aed]' : 'border-slate-100 text-slate-400 hover:bg-[#7c3aed] hover:text-white hover:border-[#7c3aed]'}`}
-                              >
-                                <Eye size={18}/>
-                              </button>
-                              <button 
-                                onClick={() => { setSelectedRelationship(item); setIsEditOpen(true); }} 
-                                className={`p-2.5 rounded-xl border transition-all ${isDark ? 'border-white/5 text-slate-500 hover:text-white hover:bg-[#7c3aed]' : 'border-slate-100 text-slate-400 hover:bg-[#7c3aed] hover:text-white hover:border-[#7c3aed]'}`}
-                              >
-                                <Edit size={18}/>
-                              </button>
-                              <button 
-                                onClick={() => handleDelete(item.id)} 
-                                className={`p-2.5 rounded-xl border transition-all ${isDark ? 'border-white/5 text-slate-500 hover:text-white hover:bg-red-500' : 'border-slate-100 text-slate-400 hover:bg-red-500 hover:text-white hover:border-red-500'}`}
-                              >
-                                <Trash2 size={18}/>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="relative w-full md:w-64">
+                  <Filter className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                  <select
+                    value={currentDepartment}
+                    onChange={(e) => { setCurrentDepartment(e.target.value); setCurrentPage(1); }}
+                    className={`w-full ${styles.input} border text-sm font-bold rounded-2xl pl-14 pr-10 py-5 outline-none appearance-none cursor-pointer`}
+                  >
+                    <option value="All">All Departments</option>
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.id}>{dept.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={18} />
                 </div>
+              </div>
 
-                {/* Pagination Controls */}
-                {filteredAssignments.length > 0 && (
-                  <div className={`flex flex-col md:flex-row items-center justify-between gap-6 pt-8 border-t transition-colors ${isDark ? 'border-white/5' : 'border-slate-100'}`}>
-                    <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                      Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredAssignments.length)} of {filteredAssignments.length} Nodes
-                    </p>
-                    
-                    <div className="flex items-center gap-3">
-                      <button 
-                        disabled={currentPage === 1}
-                        onClick={() => setCurrentPage(prev => prev - 1)}
-                        className={`p-3 rounded-xl border transition-all ${isDark ? 'border-white/5' : 'border-slate-100'} ${currentPage === 1 ? 'opacity-20 cursor-not-allowed' : 'hover:bg-[#7c3aed] hover:text-white'}`}
-                      >
-                        <ChevronLeft size={18}/>
-                      </button>
-
-                      <div className="flex gap-1.5">
-                        {[...Array(totalPages)].map((_, i) => (
-                          <button
-                            key={i + 1}
-                            onClick={() => setCurrentPage(i + 1)}
-                            className={`w-10 h-10 rounded-xl text-xs font-black transition-all ${
-                              currentPage === i + 1 
-                              ? 'bg-[#7c3aed] text-white shadow-lg' 
-                              : `border ${isDark ? 'border-white/5 text-slate-500 hover:bg-white/5' : 'border-slate-100 text-slate-400 hover:bg-slate-50'}`
-                            }`}
-                          >
-                            {i + 1}
-                          </button>
-                        ))}
-                      </div>
-
-                      <button 
-                        disabled={currentPage === totalPages}
-                        onClick={() => setCurrentPage(prev => prev + 1)}
-                        className={`p-3 rounded-xl border transition-all ${isDark ? 'border-white/5' : 'border-slate-100'} ${currentPage === totalPages ? 'opacity-20 cursor-not-allowed' : 'hover:bg-[#7c3aed] hover:text-white'}`}
-                      >
-                        <ChevronRight size={18}/>
-                      </button>
-                    </div>
-                  </div>
+              {/* Table */}
+              <div className="overflow-x-auto min-h-75">
+                {loading ? (
+                    <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#7c3aed]" size={40}/></div>
+                ) : (
+                <table className="w-full text-left border-separate border-spacing-y-3">
+                  <thead>
+                    <tr className={`text-[10px] ${textMuted} uppercase tracking-[0.2em] font-black`}>
+                      <th className="pb-4 px-6">Employee</th>
+                      <th className="pb-4 px-6">Department</th>
+                      <th className="pb-4 px-6">Manager</th>
+                      <th className="pb-4 px-6 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentTableData.map(item => (
+                      <tr key={item.id} className="group transition-all">
+                        <td className={`py-6 px-6 rounded-l-3xl border-y border-l transition-colors ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-white'}`}>
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-xl bg-linear-to-tr from-[#7c3aed] to-purple-400 flex items-center justify-center text-white font-black text-[10px]">
+                              {getDisplayName(item.employee).split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <span className={`text-sm font-black tracking-tight ${textMain}`}>{getDisplayName(item.employee)}</span>
+                          </div>
+                        </td>
+                        <td className={`py-6 px-6 border-y transition-colors ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-white'}`}>
+                          <p className={`text-xs font-black uppercase tracking-widest text-[#7c3aed]`}>
+                            {resolveDeptName(item)}
+                          </p>
+                          <p className={`text-[10px] font-bold ${textMuted}`}>
+                            {item.jobPosition?.title || item.employee?.jobPositionRel?.title || 'Staff'}
+                          </p>
+                        </td>
+                        <td className={`py-6 px-6 border-y transition-colors ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-white'}`}>
+                          {item.manager ? (
+                            <div className="flex items-center gap-2 text-[#7c3aed] bg-[#7c3aed]/5 px-3 py-1.5 rounded-lg border border-[#7c3aed]/10 w-fit text-[11px] font-black">
+                              <ShieldCheck size={14}/> {getDisplayName(item.manager)}
+                            </div>
+                          ) : (
+                            <span className="text-[10px] font-bold text-slate-500 italic">Self-Reporting</span>
+                          )}
+                        </td>
+                        <td className={`py-6 px-6 rounded-r-3xl border-y border-r text-right transition-colors ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-white'}`}>
+                          <div className="flex justify-end gap-2">
+                              <button onClick={() => { setSelectedRelationship(item); setIsViewOpen(true); }} className={`p-2.5 rounded-xl border transition-all ${isDark ? 'border-white/5 text-slate-500 hover:text-white hover:bg-[#7c3aed]' : 'border-slate-100 text-slate-400 hover:bg-[#7c3aed] hover:text-white'}`}><Eye size={18}/></button>
+                              <button onClick={() => { setSelectedRelationship(item); setIsEditOpen(true); }} className={`p-2.5 rounded-xl border transition-all ${isDark ? 'border-white/5 text-slate-500 hover:text-white hover:bg-[#7c3aed]' : 'border-slate-100 text-slate-400 hover:bg-[#7c3aed] hover:text-white'}`}><Edit size={18}/></button>
+                              <button onClick={() => handleDelete(item.id)} className={`p-2.5 rounded-xl border transition-all ${isDark ? 'border-white/5 text-slate-500 hover:text-white hover:bg-red-500' : 'border-slate-100 text-slate-400 hover:bg-red-500 hover:text-white'}`}><Trash2 size={18}/></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
                 )}
+              </div>
+
+              {/* Pagination */}
+              <div className="flex justify-between items-center pt-6">
+                <p className={`text-[10px] font-black uppercase tracking-widest ${textMuted}`}>Showing {currentTableData.length} of {filteredAssignments.length} Lines</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className={`p-3 rounded-xl border transition-all disabled:opacity-30 ${isDark ? 'border-white/10 text-white' : 'border-slate-200'}`}><ChevronLeft size={18}/></button>
+                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className={`p-3 rounded-xl border transition-all disabled:opacity-30 ${isDark ? 'border-white/10 text-white' : 'border-slate-200'}`}><ChevronRight size={18}/></button>
+                </div>
               </div>
             </div>
           ) : (
-            /* TAB 2: RELATIONSHIP TREE VIEW */
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-10 animate-in slide-in-from-right-4 duration-500">
-              
-              {/* Dept Sidebar */}
-              <div className="lg:col-span-1 space-y-4">
-                <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] ml-2 mb-6 text-center lg:text-left">Directory</h4>
-                {['Executive', 'Finance', 'IT', 'HR'].map(dept => (
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+              <div className="lg:col-span-1 space-y-3">
+                <h4 className="text-[10px] font-black text-[#94a3b8] uppercase tracking-widest ml-2 mb-4">Select Department</h4>
+                {departments.map(dept => (
                   <button 
-                    key={dept} 
-                    onClick={() => setSelectedDept(dept)}
-                    className={`w-full text-left p-6 rounded-4xl border transition-all flex justify-between items-center ${
-                      selectedDept === dept 
-                      ? 'bg-[#7c3aed] border-[#7c3aed] text-white shadow-2xl shadow-purple-500/30 translate-x-2' 
-                      : `border-transparent ${isDark ? 'text-slate-500 hover:bg-white/5 hover:text-slate-300' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-900'}`
+                    key={dept.id} 
+                    onClick={() => setSelectedDept(dept.name)}
+                    className={`w-full text-left p-5 rounded-3xl border transition-all flex justify-between items-center ${
+                      selectedDept === dept.name 
+                      ? 'bg-[#7c3aed] border-[#7c3aed] text-white shadow-xl shadow-purple-500/20' 
+                      : `${isDark ? 'border-white/5 text-[#94a3b8]' : 'border-slate-200 text-slate-500'} hover:bg-white/5`
                     }`}
                   >
-                    <span className="text-sm font-black uppercase tracking-widest">{dept}</span>
-                    <ChevronRight size={18} className={selectedDept === dept ? 'opacity-100' : 'opacity-20'}/>
+                    <span className="text-sm font-black">{dept.name}</span>
+                    <ChevronRight size={16} className={selectedDept === dept.name ? 'opacity-100' : 'opacity-20'}/>
                   </button>
                 ))}
               </div>
 
-              {/* Tree Visualization */}
-              <div className={`lg:col-span-3 min-h-150 border transition-all ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-slate-50/50'} rounded-[3rem] p-10 flex flex-col items-center`}>
-                <div className="mb-16 text-center">
-                   <h3 className={`text-3xl font-black tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>{selectedDept} Hierarchy</h3>
-                   <p className="text-[11px] text-slate-500 font-black uppercase tracking-widest mt-2">Interactive Reporting Architecture</p>
+              <div className={`lg:col-span-3 min-h-125 border rounded-[2.5rem] p-10 flex flex-col items-center ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-slate-50/30'}`}>
+                <div className="mb-12 text-center">
+                   <h3 className={`text-2xl font-black tracking-tighter ${textMain}`}>{selectedDept} Hierarchy</h3>
                 </div>
 
-                <div className="flex flex-col items-center gap-16 w-full max-w-2xl">
-                  {deptMembers.map((member, idx) => (
-                    <div key={member.id} className="relative flex flex-col items-center w-full">
-                      {idx !== 0 && (
-                        <div className="absolute -top-16 flex flex-col items-center h-16">
-                           <div className="w-0.5 h-full bg-linear-to-b from-[#7c3aed]/0 via-[#7c3aed]/30 to-[#7c3aed]/60"></div>
-                        </div>
-                      )}
+                <div className="flex flex-col items-center gap-12 w-full">
+                  {deptMembers.length > 0 ? deptMembers.map((member, idx) => (
+                    <div key={member.id} className="relative flex flex-col items-center">
+                      {idx !== 0 && <div className="absolute -top-12 w-0.5 h-12 bg-[#7c3aed]/30"></div>}
                       <div 
                         onClick={() => { setSelectedRelationship(member); setIsViewOpen(true); }}
-                        className={`w-full max-w-sm p-8 rounded-[2.5rem] border group transition-all cursor-pointer text-center relative ${
-                          isDark 
-                          ? 'bg-[#0f172a] border-white/10 hover:border-[#7c3aed] shadow-[0_20px_50px_rgba(0,0,0,0.5)]' 
-                          : 'bg-white border-slate-200 hover:border-[#7c3aed] shadow-xl shadow-slate-200/50'
-                        }`}
+                        className={`w-72 p-6 rounded-4xl border transition-all cursor-pointer group text-center ${
+                          isDark ? 'bg-[#0f172a] border-white/10 shadow-2xl' : 'bg-white border-slate-200 shadow-lg'
+                        } hover:border-[#7c3aed] hover:scale-[1.02]`}
                       >
-                        <div className="relative inline-block mb-5">
-                          <img src={member.img} className="w-20 h-20 rounded-[1.8rem] border-4 border-[#7c3aed]/10 group-hover:scale-110 group-hover:rotate-3 transition-transform" alt=""/>
-                          <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-[#7c3aed] rounded-xl flex items-center justify-center text-white border-4 border-current transition-colors duration-500" style={{ color: isDark ? '#0f172a' : '#ffffff' }}>
-                             <ShieldCheck size={14}/>
-                          </div>
+                        <div className="w-16 h-16 rounded-2xl mx-auto mb-4 bg-linear-to-tr from-[#7c3aed] to-purple-400 flex items-center justify-center text-white font-black text-xl">
+                          {getDisplayName(member.employee).charAt(0)}
                         </div>
-                        <h4 className={`font-black text-lg tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{member.emp}</h4>
-                        <p className="text-[11px] font-black text-[#7c3aed] uppercase tracking-[0.2em] mt-1 mb-6">{member.pos}</p>
-                        
-                        <div className={`pt-5 border-t ${isDark ? 'border-white/5' : 'border-slate-100'} flex flex-col gap-1`}>
-                           <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Immediate Supervisor</span>
-                           <span className={`text-xs font-black ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{member.supervisor}</span>
+                        <h4 className={`font-black text-sm ${textMain}`}>{getDisplayName(member.employee)}</h4>
+                        <p className="text-[10px] font-bold text-[#7c3aed] uppercase tracking-widest mb-4">
+                            {member.jobPosition?.title || member.employee?.jobPositionRel?.title || 'Staff Member'}
+                        </p>
+                        <div className={`pt-4 border-t flex items-center justify-center gap-2 ${isDark ? 'border-white/5' : 'border-slate-100'}`}>
+                           <ShieldCheck size={14} className="text-emerald-500"/>
+                           <span className="text-[10px] font-black text-[#94a3b8] uppercase">
+                             Reports to: {member.manager ? getDisplayName(member.manager) : 'Independent'}
+                           </span>
                         </div>
                       </div>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="py-20 text-center space-y-4">
+                       <GitMerge size={40} className="mx-auto text-slate-700 opacity-20" />
+                       <p className={textMuted + " text-sm font-bold"}>No hierarchy records found for this department.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -375,20 +473,8 @@ const Structure = () => {
         </div>
       </div>
 
-      {/* Modals - PASSED THEME EXPLICITLY HERE */}
-      <ViewStructure 
-        isOpen={isViewOpen} 
-        onClose={() => setIsViewOpen(false)} 
-        data={selectedRelationship} 
-        theme={theme} 
-      />
-      <EditStructure 
-        isOpen={isEditOpen} 
-        onClose={() => setIsEditOpen(false)} 
-        data={selectedRelationship} 
-        onSave={handleSaveEdit} 
-        theme={theme}
-      />
+      {isViewOpen && <ViewStructure isOpen={isViewOpen} onClose={() => setIsViewOpen(false)} data={selectedRelationship} theme={theme} />}
+      {isEditOpen && <EditStructure isOpen={isEditOpen} onClose={() => setIsEditOpen(false)} data={selectedRelationship} onSave={fetchAllData} theme={theme} />}
     </main>
   );
 };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Palette, Calendar, ListPlus, Save, Trash2, Loader2 } from 'lucide-react';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 
 const EditLeaveTypeModal = ({ isOpen, onClose, theme = 'dark', data }) => {
   const [loading, setLoading] = useState(false);
@@ -46,7 +46,7 @@ const handleUpdate = async (e) => {
   setLoading(true);
   try {
     // Change "admin" to "auth" here if that's your route prefix
-    await axios.put(`http://localhost:3000/api/auth/leave-types/${data.id}`, {
+    await axios.put(`http://localhost:5000/api/auth/leave-types/${data.id}`, {
       ...formData,
       maxDays: parseInt(formData.maxDays) || 0
     });
@@ -63,7 +63,7 @@ const handleUpdate = async (e) => {
     if (window.confirm('Are you sure? This will delete the leave category permanently.')) {
       setLoading(true);
       try {
-        await axios.delete(`http://localhost:3000/api/admin/leave-types/${data.id}`);
+        await axios.delete(`http://localhost:5000/api/admin/leave-types/${data.id}`);
         onClose();
       } catch (error) {
         alert("Failed to delete. This type might be assigned to employees.");

@@ -15,8 +15,6 @@ const EditEmployeeModal = ({ employee, isOpen, onClose, theme, onUpdateSuccess }
   const [allPositions, setAllPositions] = useState([]);
   const [filteredPositions, setFilteredPositions] = useState([]);
 
-  // Check if the user is editing their own record
-  // We pull the logged-in user ID from localStorage/Token
   const loggedInUserId = JSON.parse(localStorage.getItem('user'))?.id;
   const isSelfEditing = employee?.id === loggedInUserId;
   
@@ -46,8 +44,8 @@ const EditEmployeeModal = ({ employee, isOpen, onClose, theme, onUpdateSuccess }
     const fetchMetadata = async () => {
       try {
         const [deptRes, posRes] = await Promise.all([
-          fetch('http://localhost:3000/api/auth/departments'),
-          fetch('http://localhost:3000/api/auth/positions')
+          fetch('http://localhost:5000/api/auth/departments'),
+          fetch('http://localhost:5000/api/positions')
         ]);
         setDepartments(await deptRes.json());
         setAllPositions(await posRes.json());
@@ -104,18 +102,29 @@ const EditEmployeeModal = ({ employee, isOpen, onClose, theme, onUpdateSuccess }
     
     try {
       const data = new FormData();
+      
+      // EXCLUSION LOGIC: Prevent sending complex objects or wrong types (like telegramVerified string)
       Object.keys(formData).forEach(key => {
-        if (!['department', 'jobPosition', 'createdAt', 'updatedAt', 'auditLogs', 'departmentRel', 'jobPositionRel'].includes(key)) {
-          data.append(key, formData[key]);
+        const excludedFields = [
+          'department', 'jobPosition', 'createdAt', 'updatedAt', 
+          'auditLogs', 'departmentRel', 'jobPositionRel', 'profileImage',
+          'telegramVerified', 'otpCode', 'otpExpires', 'telegramId' // Added these to prevent Prisma crash
+        ];
+
+        if (!excludedFields.includes(key)) {
+          if (formData[key] !== null && formData[key] !== undefined) {
+            data.append(key, formData[key]);
+          }
         }
       });
 
-      if (selectedFile) data.append('profileImage', selectedFile);
+      if (selectedFile) {
+        data.append('profileImage', selectedFile);
+      }
 
-      const response = await fetch(`http://localhost:3000/api/auth/employees/${employee.id}`, {
+      const response = await fetch(`http://localhost:5000/api/auth/employees/${employee.id}`, {
         method: 'PATCH',
         headers: {
-            // Include token if your routes are protected
             'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: data,
@@ -124,33 +133,36 @@ const EditEmployeeModal = ({ employee, isOpen, onClose, theme, onUpdateSuccess }
       const result = await response.json();
 
       if (response.ok) {
-        // If editing self, update local storage with new data/token
         if (isSelfEditing) {
             if (result.token) localStorage.setItem('token', result.token);
             localStorage.setItem('user', JSON.stringify(result.employee));
         }
 
         setShowNotification({ type: 'success', message: 'RECORDS UPDATED' });
+        
         setTimeout(() => { 
           onUpdateSuccess(); 
           onClose(); 
           setShowNotification(null); 
-          if (isSelfEditing) window.location.reload(); // Refresh to update UI/Sidebar
+          if (isSelfEditing) window.location.reload(); 
         }, 1500);
       } else {
         setShowNotification({ type: 'error', message: result.message || 'UPDATE FAILED' });
       }
     } catch (err) {
+      console.error("Submit Error:", err);
       setShowNotification({ type: 'error', message: 'SERVER ERROR' });
-    } finally { setIsSubmitting(false); }
-  };
+    } finally { 
+      setIsSubmitting(false); 
+    }
+  }; 
 
   if (!isOpen || !employee) return null;
 
   return (
     <div className={styles.overlay} onClick={onClose}>
       {showNotification && (
-        <div className={`fixed top-10 right-10 z-5000 flex items-center gap-3 px-8 py-4 rounded-2xl shadow-2xl border animate-in slide-in-from-right-10 ${
+        <div className={`fixed top-10 right-10 z-6000 flex items-center gap-3 px-8 py-4 rounded-2xl shadow-2xl border animate-in slide-in-from-right-10 ${
           showNotification.type === 'success' ? 'bg-emerald-500 text-white border-emerald-400' : 'bg-red-500 text-white border-red-400'
         }`}>
           {showNotification.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}

@@ -2,19 +2,33 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 // 1. GET Requests (Table View with Filters)
-// Locate your getLeaveRequests function and update the include section:
+
 exports.getLeaveRequests = async (req, res) => {
-    const { month, year } = req.query;
+    // 1. Destructure all possible filters
+    const { month, year, deptId, userId } = req.query; 
     
     try {
         let whereClause = {};
+
+        // 2. Date Filtering (Shared by all roles)
         if (month && year) {
             const startOfMonth = new Date(year, month - 1, 1);
             const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
-            whereClause = {
-                startDate: { gte: startOfMonth, lte: endOfMonth },
+            whereClause.startDate = { gte: startOfMonth, lte: endOfMonth };
+        }
+
+        // 3. Hierarchical Filtering Logic
+        if (userId) {
+            // Priority 1: Personal View (Employee)
+            whereClause.userId = userId;
+        } 
+        else if (deptId && deptId !== 'All Departments') {
+            // Priority 2: Department View (Manager)
+            whereClause.user = {
+                departmentId: deptId
             };
         }
+        // If neither userId nor deptId is provided, it stays as Admin View (Fetch All)
 
         const requests = await prisma.leaveRequest.findMany({
             where: whereClause,
@@ -25,7 +39,7 @@ exports.getLeaveRequests = async (req, res) => {
                         lastName: true, 
                         email: true, 
                         employeeId: true,
-                        departmentId: true // <--- ADD THIS LINE
+                        departmentId: true 
                     } 
                 },
                 leaveType: { select: { name: true, color: true } },
@@ -44,7 +58,8 @@ exports.getLeaveRequests = async (req, res) => {
 // 2. GET Calendar Specific (Updated to include departmentId)
 exports.getCalendarLeaves = async (req, res) => {
     try {
-        const { year, month, status } = req.query;
+        // Destructure userId along with other filters
+        const { year, month, status, deptId, userId } = req.query; 
         
         if (!year || !month) {
             return res.status(400).json({ error: "Year and Month are required." });
@@ -52,11 +67,10 @@ exports.getCalendarLeaves = async (req, res) => {
 
         const yr = parseInt(year);
         const mo = parseInt(month);
-
         const startOfMonth = new Date(yr, mo - 1, 1);
         const endOfMonth = new Date(yr, mo, 0, 23, 59, 59, 999);
 
-        // Build where clause based on status
+        // Base date range filter
         let whereClause = {
             AND: [
                 { startDate: { lte: endOfMonth } },
@@ -64,9 +78,26 @@ exports.getCalendarLeaves = async (req, res) => {
             ]
         };
 
-        // If status is not 'ALL', filter by status (default to APPROVED if not specified)
-        if (status !== 'ALL') {
-            whereClause.status = status ? status.toUpperCase() : 'APPROVED';
+        // --- HIERARCHICAL FILTERING ---
+        
+        if (userId) {
+            // 1. Employee View: Strictly only their own leaves
+            whereClause.userId = userId;
+        } 
+        else if (deptId && deptId !== 'All Departments') {
+            // 2. Manager View: Only leaves from their department
+            whereClause.user = {
+                departmentId: deptId
+            };
+        }
+        // 3. Admin View: If no userId or deptId, whereClause remains date-only (Fetch All)
+
+        // --- STATUS LOGIC ---
+        if (status && status !== 'ALL') {
+            whereClause.status = status.toUpperCase();
+        } else if (!status) {
+            // Default to Approved for calendar views
+            whereClause.status = 'APPROVED';
         }
 
         const requests = await prisma.leaveRequest.findMany({
@@ -76,7 +107,7 @@ exports.getCalendarLeaves = async (req, res) => {
                     select: { 
                         firstName: true, 
                         lastName: true, 
-                        departmentId: true // <--- IMPORTANT: Needed for Calendar Filtering
+                        departmentId: true 
                     } 
                 },
                 leaveType: { select: { name: true, color: true } },
@@ -85,7 +116,7 @@ exports.getCalendarLeaves = async (req, res) => {
 
         res.status(200).json(requests);
     } catch (error) {
-        console.error("PRISMA ERROR:", error); 
+        console.error("Calendar Fetch Error:", error);
         res.status(500).json({ error: error.message });
     }
 };

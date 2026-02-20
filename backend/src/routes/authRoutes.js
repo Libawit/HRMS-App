@@ -5,6 +5,8 @@ const path = require('path');
 const fs = require('fs');
 const authController = require('../controllers/authController');
 
+const { protect } = require('../middleware/authMiddleware');
+
 // 1. Ensure uploads directory exists
 const uploadDir = 'uploads';
 if (!fs.existsSync(uploadDir)) {
@@ -68,20 +70,30 @@ router.post('/register', handleUpload('profileImage'), authController.register);
 router.post('/login', authController.login);
 
 // Employee Management
-router.get('/employees', authController.getAllEmployees);
+router.get('/employees', protect, authController.getAllEmployees);
 router.get('/search-users', authController.getAllUsersForSearch);
+
 
 // Update Employee (with image upload)
 // 'profileImage' must match the key used in Frontend FormData.append('profileImage', file)
 router.patch('/employees/:id', handleUpload('profileImage'), authController.updateEmployee);
 
-router.get('/employees/:id/history', authController.getEmployeeHistory);
+router.get('/employees/:id/history', protect,authController.getEmployeeHistory);
 
 // Delete Employee
 router.delete('/employees/:id', authController.deleteEmployee);
 
+
+router.get('/me', protect, authController.getMe);
+router.patch('/update-me', protect, handleUpload('profileImage'), authController.updateProfile);
+
+router.get('/dashboard-stats', protect, authController.getDashboardStats);
+
 // Metadata (For dropdowns)
-router.get('/departments', authController.getDepartments);
+router.get('/structure', authController.getStructureData);
+router.get('/departments', protect, authController.getDepartments);
 router.get('/positions', authController.getPositions);
+
+
 
 module.exports = router;

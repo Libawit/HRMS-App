@@ -39,28 +39,34 @@ const JobPosition = () => {
 
   // --- API Fetching ---
   const fetchData = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const [posRes, deptRes] = await Promise.all([
-        fetch('http://localhost:3000/api/auth/positions'),
-        fetch('http://localhost:3000/api/auth/departments')
-      ]);
+  try {
+    setIsLoading(true);
+    const token = localStorage.getItem('token'); // 1. Get the token
 
-      if (!posRes.ok || !deptRes.ok) throw new Error("Server communication failed");
+    const headers = {
+      'Authorization': `Bearer ${token}`, // 2. Create the header
+      'Content-Type': 'application/json'
+    };
 
-      const posData = await posRes.json();
-      const deptData = await deptRes.json();
+    const [posRes, deptRes] = await Promise.all([
+      fetch('http://localhost:5000/api/positions', { headers }),
+      fetch('http://localhost:5000/api/auth/departments', { headers })
+    ]);
 
-      
+    if (!posRes.ok || !deptRes.ok) throw new Error("Server communication failed");
 
-      setPositions(posData);
-      setDepartments(deptData);
-    } catch (error) {
-      console.error("Fetch error:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+    const posData = await posRes.json();
+    const deptData = await deptRes.json();
+
+    setPositions(posData);
+    setDepartments(deptData);
+  } catch (error) {
+    console.error("Fetch error:", error);
+    // If unauthorized, you might want to redirect the user to login here
+  } finally {
+    setIsLoading(false);
+  }
+}, []);
 
   useEffect(() => {
     fetchData();
@@ -68,17 +74,25 @@ const JobPosition = () => {
 
   // --- Handlers ---
   const handleDelete = async (id) => {
-    if (window.confirm("Permanent Action: Remove this position from records?")) {
-      try {
-        const res = await fetch(`http://localhost:3000/api/auth/positions/${id}`, {
-          method: 'DELETE',
-        });
-        if (res.ok) fetchData();
-      } catch (error) {
-        alert("Delete failed. Check if users are still assigned to this role.");
+  if (window.confirm("Permanent Action: Remove this position from records?")) {
+    try {
+      const token = localStorage.getItem('token'); // Get token
+      const res = await fetch(`http://localhost:5000/api/positions/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}` // Add protection
+        }
+      });
+      if (res.ok) {
+        fetchData();
+      } else {
+        alert("Action unauthorized. Only Admins can delete positions.");
       }
+    } catch (error) {
+      alert("Delete failed. Check connection.");
     }
-  };
+  }
+};
 
   // --- Filtering & Search ---
   const filteredPositions = useMemo(() => {

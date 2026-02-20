@@ -37,13 +37,26 @@ const AddEmployee = () => {
   useEffect(() => {
     const fetchMetadata = async () => {
       try {
+        const token = localStorage.getItem('token'); // Get the token
+        const headers = {
+          'Authorization': `Bearer ${token}`
+        };
+
         const [deptRes, posRes] = await Promise.all([
-          fetch('http://localhost:3000/api/auth/departments'),
-          fetch('http://localhost:3000/api/auth/positions')
+          fetch('http://localhost:5000/api/auth/departments', { headers }),
+          fetch('http://localhost:5000/api/positions', { headers })
         ]);
+
+        // Handle cases where the response might not be JSON (like a 401 error page)
+        if (!deptRes.ok || !posRes.ok) {
+          throw new Error('Unauthorized or Server Error');
+        }
+
         setDepartments(await deptRes.json());
         setAllPositions(await posRes.json());
-      } catch (err) { console.error("Metadata fetch failed", err); }
+      } catch (err) { 
+        console.error("Metadata fetch failed", err); 
+      }
     };
     fetchMetadata();
   }, []);
@@ -98,29 +111,36 @@ const AddEmployee = () => {
   };
 
   // --- SUBMIT LOGIC ---
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validateEmail(formData.email)) return;
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (!validateEmail(formData.email)) return;
 
-    setIsSubmitting(true);
+  setIsSubmitting(true);
+  const token = localStorage.getItem('token'); // Get the token
 
-    const dataToSend = new FormData();
-    Object.keys(formData).forEach(key => {
-      const value = formData[key];
-      dataToSend.append(key, value === null ? '' : value);
+  const dataToSend = new FormData();
+  Object.keys(formData).forEach(key => {
+    const value = formData[key];
+    dataToSend.append(key, value === null ? '' : value);
+  });
+
+  if (selectedFile) {
+    dataToSend.append('profileImage', selectedFile);
+  }
+
+  try {
+    const response = await fetch('http://localhost:5000/api/auth/register', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}` // Add the badge here
+        // Note: Do NOT set 'Content-Type' when sending FormData; 
+        // the browser needs to set the boundary itself.
+      },
+      body: dataToSend, 
     });
 
-    if (selectedFile) {
-      dataToSend.append('profileImage', selectedFile);
-    }
-
-    try {
-      const response = await fetch('http://localhost:3000/api/auth/register', {
-        method: 'POST',
-        body: dataToSend, 
-      });
-
-      const data = await response.json();
+    const data = await response.json();
+    // ... rest of your logic
 
       if (response.ok) {
         setShowNotification({ type: 'success', message: 'Employee Created Successfully!' });

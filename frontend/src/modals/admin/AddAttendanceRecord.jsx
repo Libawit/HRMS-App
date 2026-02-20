@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Search, Loader2, Clock, Calendar, CheckCircle, Timer, MapPin } from 'lucide-react';
-import axios from 'axios';
+import { X, Search, Loader2, Clock, Calendar, CheckCircle, Timer, MapPin, AlertTriangle } from 'lucide-react';
+import axios from '../../utils/axiosConfig';
 
 const AddAttendanceRecord = ({ isOpen, onClose, theme = 'dark', onRefresh }) => {
+  // --- Helper for Local Date (YYYY-MM-DD) ---
+  const getLocalDate = () => new Date().toLocaleDateString('en-CA');
+
   // --- Form State ---
   const [formData, setFormData] = useState({
     userId: '',
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDate(), // FIXED: Now uses local date
     checkIn: '09:00',
     checkOut: '17:00',
     status: 'On Time',
@@ -24,7 +27,6 @@ const AddAttendanceRecord = ({ isOpen, onClose, theme = 'dark', onRefresh }) => 
 
   const isDark = theme === 'dark';
 
-  // --- Theme Styles (Matching your Leave Request) ---
   const styles = {
     modalOverlay: "fixed inset-0 bg-black/70 backdrop-blur-sm z-[2000] flex items-center justify-center p-4",
     card: isDark ? "bg-[#0b1220] border-white/10 text-[#e5e7eb]" : "bg-white border-slate-200 text-[#1e293b]",
@@ -34,7 +36,20 @@ const AddAttendanceRecord = ({ isOpen, onClose, theme = 'dark', onRefresh }) => 
     footer: isDark ? "bg-[#020617]/50" : "bg-slate-50"
   };
 
-  // --- Click Outside Handler ---
+  // Reset form when modal opens to ensure current date/time is fresh
+  useEffect(() => {
+    if (isOpen) {
+      setFormData(prev => ({
+        ...prev,
+        date: getLocalDate(),
+        userId: '',
+        note: ''
+      }));
+      setSearchQuery('');
+    }
+  }, [isOpen]);
+
+  // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -45,13 +60,13 @@ const AddAttendanceRecord = ({ isOpen, onClose, theme = 'dark', onRefresh }) => 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // --- Fetch Employees (Using your exact URL) ---
+  // Fetch employees when modal opens
   useEffect(() => {
     if (isOpen) {
       const fetchEmployees = async () => {
         setLoading(true);
         try {
-          const res = await axios.get('http://localhost:3000/api/auth/users');
+          const res = await axios.get('http://localhost:5000/api/auth/users');
           setEmployees(Array.isArray(res.data) ? res.data : []);
         } catch (err) {
           console.error("Failed to fetch employees", err);
@@ -63,24 +78,26 @@ const AddAttendanceRecord = ({ isOpen, onClose, theme = 'dark', onRefresh }) => 
     }
   }, [isOpen]);
 
-  // --- Duration & Auto-Status Logic ---
+  // --- Logic for Duration & Auto-Status ---
   useEffect(() => {
-    if (formData.checkIn && formData.checkOut) {
-      // 1. Calculate Hours
+    if (formData.checkIn && formData.checkOut && formData.status !== 'Absent') {
       const start = new Date(`2000-01-01T${formData.checkIn}`);
       const end = new Date(`2000-01-01T${formData.checkOut}`);
       let diff = (end - start) / (1000 * 60 * 60);
       if (diff < 0) diff += 24;
       setDuration(diff.toFixed(1));
 
-      // 2. Auto-Status (Late if after 09:05)
       const [hours, minutes] = formData.checkIn.split(':').map(Number);
       const isLate = hours > 9 || (hours === 9 && minutes > 5);
-      setFormData(prev => ({ ...prev, status: isLate ? 'Late' : 'On Time' }));
+      const isHalfDay = diff > 0 && diff <= 4;
+
+      setFormData(prev => ({ 
+        ...prev, 
+        status: isLate ? 'Late' : (isHalfDay ? 'Half Day' : 'On Time') 
+      }));
     }
   }, [formData.checkIn, formData.checkOut]);
 
-  // --- Filter Logic ---
   const filteredEmployees = employees.filter(emp => {
     const fullName = emp.name || `${emp.firstName} ${emp.lastName}`;
     const search = searchQuery.toLowerCase();
@@ -91,66 +108,57 @@ const AddAttendanceRecord = ({ isOpen, onClose, theme = 'dark', onRefresh }) => 
   });
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  if (!formData.userId) return alert("Please select an employee");
-  setLoading(true);
+    e.preventDefault();
+    if (!formData.userId) return alert("Please select an employee");
+    setLoading(true);
 
-  const token = localStorage.getItem('token'); 
+    const token = localStorage.getItem('token'); 
+    const fullCheckIn = new Date(`${formData.date}T${formData.checkIn}:00`).toISOString();
+    const fullCheckOut = new Date(`${formData.date}T${formData.checkOut}:00`).toISOString();
+    const attendanceDate = new Date(formData.date).toISOString();
 
-  // Prisma expects ISO Strings for DateTime fields
-  // We combine the selected date with the selected time
-  const fullCheckIn = new Date(`${formData.date}T${formData.checkIn}:00`).toISOString();
-  const fullCheckOut = new Date(`${formData.date}T${formData.checkOut}:00`).toISOString();
-  const attendanceDate = new Date(formData.date).toISOString();
+    const payload = {
+      employeeId: String(formData.userId),
+      date: attendanceDate,
+      checkIn: formData.status === 'Absent' ? null : fullCheckIn,
+      checkOut: formData.status === 'Absent' ? null : fullCheckOut,
+      status: formData.status,
+      note: formData.note || ""
+    };
 
-  const payload = {
-    employeeId: String(formData.userId), // MUST be a string for UUID
-    date: attendanceDate,
-    checkIn: fullCheckIn,
-    checkOut: fullCheckOut,
-    status: formData.status,
-    note: formData.note || ""
-  };
-
-  try {
-    await axios.post('http://localhost:3000/api/attendance/manual', payload, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    
-    if (onRefresh) onRefresh();
-    alert("Record saved successfully!");
-    onClose();
-  } catch (err) {
-    console.error("Submission Error:", err.response?.data);
-    alert(err.response?.data?.message || "Error saving record. Check console.");
-  } finally {
-    setLoading(false);
-  }
-};
-
-const [isDuplicate, setIsDuplicate] = useState(false);
-
-useEffect(() => {
-  const checkDuplicate = async () => {
-    if (formData.userId && formData.date) {
-      try {
-        const token = localStorage.getItem('token');
-        // We call the existing getAllAttendance with filters to see if a record exists
-        const res = await axios.get(`http://localhost:3000/api/attendance`, {
-          headers: { Authorization: `Bearer ${token}` },
-          params: { date: formData.date, search: searchQuery } // Searching for this specific user
-        });
-        
-        // If the record exists in the returned array
-        const exists = res.data.records.some(r => r.userId === formData.userId);
-        setIsDuplicate(exists);
-      } catch (err) {
-        console.error("Check failed", err);
-      }
+    try {
+      await axios.post('http://localhost:5000/api/attendance/manual', payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (onRefresh) onRefresh();
+      onClose();
+    } catch (err) {
+      alert(err.response?.data?.message || "Error saving record.");
+    } finally {
+      setLoading(false);
     }
   };
-  checkDuplicate();
-}, [formData.userId, formData.date]);
+
+  const [isDuplicate, setIsDuplicate] = useState(false);
+
+  useEffect(() => {
+    const checkDuplicate = async () => {
+      if (formData.userId && formData.date) {
+        try {
+          const token = localStorage.getItem('token');
+          const res = await axios.get(`http://localhost:5000/api/attendance`, {
+            headers: { Authorization: `Bearer ${token}` },
+            params: { date: formData.date } 
+          });
+          const exists = res.data.records?.some(r => r.userId === formData.userId);
+          setIsDuplicate(exists);
+        } catch (err) {
+          console.error("Check failed", err);
+        }
+      }
+    };
+    checkDuplicate();
+  }, [formData.userId, formData.date]);
 
   if (!isOpen) return null;
 
@@ -171,7 +179,7 @@ useEffect(() => {
 
         <form onSubmit={handleSubmit} className="p-8 space-y-6">
           
-          {/* Searchable Employee Field */}
+          {/* Employee Search */}
           <div className="relative" ref={dropdownRef}>
             <label className={styles.label}>Search Employee*</label>
             <div className="relative">
@@ -241,8 +249,8 @@ useEffect(() => {
             </div>
           </div>
 
-          {/* Time Range */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Time Fields */}
+          <div className={`grid grid-cols-2 gap-4 ${formData.status === 'Absent' ? 'opacity-30 pointer-events-none' : ''}`}>
             <div className="space-y-1.5">
               <label className={styles.label}>Check In*</label>
               <div className="relative">
@@ -250,7 +258,7 @@ useEffect(() => {
                 <input 
                   type="time" 
                   className={`w-full border rounded-2xl p-4 pl-12 text-sm font-bold outline-none ${styles.input}`}
-                  required
+                  required={formData.status !== 'Absent'}
                   value={formData.checkIn}
                   onChange={(e) => setFormData({...formData, checkIn: e.target.value})}
                 />
@@ -263,7 +271,7 @@ useEffect(() => {
                 <input 
                   type="time" 
                   className={`w-full border rounded-2xl p-4 pl-12 text-sm font-bold outline-none ${styles.input}`}
-                  required
+                  required={formData.status !== 'Absent'}
                   value={formData.checkOut}
                   onChange={(e) => setFormData({...formData, checkOut: e.target.value})}
                 />
@@ -274,16 +282,16 @@ useEffect(() => {
           {/* Status & Location */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className={styles.label}>Status (Auto)</label>
+              <label className={styles.label}>Status*</label>
               <select 
-                className={`w-full border rounded-2xl p-4 text-sm font-black outline-none transition-all ${styles.input} ${formData.status === 'Late' ? 'text-amber-500' : 'text-emerald-500'}`}
+                className={`w-full border rounded-2xl p-4 text-sm font-black outline-none transition-all ${styles.input}`}
                 value={formData.status}
                 onChange={(e) => setFormData({...formData, status: e.target.value})}
               >
                 <option value="On Time">On Time</option>
-                <option value="Late">Late Arrival</option>
-                <option value="Overtime">Overtime</option>
-                <option value="Excused">Excused</option>
+                <option value="Late">Late</option>
+                <option value="Half Day">Half Day</option>
+                <option value="Absent">Absent</option>
               </select>
             </div>
             <div className="space-y-1.5">
@@ -294,6 +302,7 @@ useEffect(() => {
                   className={`w-full border rounded-2xl p-4 pl-12 text-sm font-bold outline-none ${styles.input}`}
                   value={formData.location}
                   onChange={(e) => setFormData({...formData, location: e.target.value})}
+                  disabled={formData.status === 'Absent'}
                 >
                   <option value="Office">Office</option>
                   <option value="Remote">Remote</option>
@@ -303,14 +312,7 @@ useEffect(() => {
             </div>
           </div>
 
-          {/* Duration Indicator */}
-          <div className="flex items-center gap-2">
-             <div className="text-[10px] font-black uppercase tracking-widest text-[#7c3aed] bg-[#7c3aed]/10 px-3 py-2 rounded-lg flex items-center gap-2">
-                <Timer size={12} /> Shift Duration: {duration} Hours
-             </div>
-          </div>
-
-          {/* Note */}
+          {/* Note Field */}
           <div className="space-y-1.5">
             <label className={styles.label}>Internal Note</label>
             <textarea 
@@ -322,6 +324,7 @@ useEffect(() => {
             />
           </div>
 
+          {/* Duplicate Warning */}
           {isDuplicate && (
             <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-2 text-red-500 mb-4">
               <AlertTriangle size={16} />

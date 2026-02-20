@@ -4,17 +4,17 @@ import {
   Clock, AlertTriangle, FileDown,
   Calendar as CalendarIcon, UserCheck,
   ChevronLeft, ChevronRight, Loader2,
-  Filter, ChevronDown
+  Filter, ChevronDown, CheckCircle2
 } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 
 // External Modals
 import AddAttendanceRecordModal from '../../modals/admin/AddAttendanceRecord';
 import EditAttendanceRecordModal from '../../modals/admin/EditAttendanceRecord';
 import ViewAttendanceRecordModal from '../../modals/admin/ViewAttendanceRecord';
 
-const API_BASE = "http://localhost:3000/api";
+const API_BASE = "http://localhost:5000/api";
 
 const AttendanceRecord = () => {
   const context = useOutletContext();
@@ -25,6 +25,7 @@ const AttendanceRecord = () => {
   const [records, setRecords] = useState([]);
   const [stats, setStats] = useState({ presentToday: 0, lateEntries: 0, totalAbsent: 0, avgWorkDay: '0h' });
   const [loading, setLoading] = useState(true);
+  const [cleaning, setCleaning] = useState(false); // For cleanup button loading
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [departments, setDepartments] = useState([]); 
@@ -54,6 +55,17 @@ const AttendanceRecord = () => {
     current.setDate(current.getDate() + days);
     setDateFilter(current.toLocaleDateString('en-CA'));
     setCurrentPage(1);
+  };
+
+  const getStatusBadge = (status) => {
+    const base = "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border shadow-sm ";
+    switch(status) {
+      case 'On Time': return base + "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
+      case 'Late': return base + "bg-amber-500/10 text-amber-500 border-amber-500/20";
+      case 'Half Day': return base + "bg-blue-500/10 text-blue-500 border-blue-500/20";
+      case 'Absent': return base + "bg-red-500/10 text-red-500 border-red-500/20";
+      default: return base + "bg-slate-500/10 text-slate-500 border-slate-500/20";
+    }
   };
 
   // --- Data Fetching ---
@@ -97,8 +109,9 @@ const AttendanceRecord = () => {
     }
   };
 
+  // --- DELETE LOGIC ---
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this record?")) return;
+    if (!window.confirm("Are you sure you want to delete this record? It will be removed permanently from today's list.")) return;
     try {
       const token = localStorage.getItem('token');
       await axios.delete(`${API_BASE}/attendance/${id}`, {
@@ -108,6 +121,26 @@ const AttendanceRecord = () => {
     } catch (error) {
       console.error("Delete failed", error);
       alert("Failed to delete record");
+    }
+  };
+
+  // --- CLEANUP LOGIC ---
+  const handleCleanup = async () => {
+    if (!window.confirm("Run end-of-day cleanup? This will automatically mark all remaining employees as 'Absent' in the database.")) return;
+    
+    setCleaning(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(`${API_BASE}/attendance/cleanup`, {}, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      alert(response.data.message);
+      fetchAttendance();
+    } catch (error) {
+      console.error("Cleanup failed", error);
+      alert(error.response?.data?.message || "Failed to run cleanup");
+    } finally {
+      setCleaning(false);
     }
   };
 
@@ -136,12 +169,24 @@ const AttendanceRecord = () => {
         </nav>
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <h1 className={`text-[2rem] font-black tracking-tighter ${titleText}`}>Attendance</h1>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
+            <button 
+              onClick={handleCleanup}
+              disabled={cleaning}
+              className={`flex items-center gap-2 px-6 py-4 rounded-2xl border transition-all text-[11px] font-black uppercase tracking-widest ${
+                isDark 
+                ? 'border-emerald-500/20 text-emerald-500 hover:bg-emerald-500/10' 
+                : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+              } disabled:opacity-50`}
+            >
+              {cleaning ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+              End Day Cleanup
+            </button>
             <button className={`flex items-center gap-2 px-8 py-4 rounded-2xl border transition-all text-xs font-black uppercase tracking-widest ${isDark ? 'border-white/10 text-white hover:bg-white/5' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}>
               <FileDown size={18} /> Export
             </button>
             <button 
-              onClick={() => setIsAddModalOpen(true)}
+              onClick={() => { setSelectedRecord(null); setIsAddModalOpen(true); }}
               className="bg-[#7c3aed] hover:bg-[#6d28d9] text-white px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all shadow-xl shadow-purple-500/20 flex items-center justify-center gap-2 active:scale-95"
             >
               <Plus size={18} strokeWidth={3} /> Add Record
@@ -213,13 +258,14 @@ const AttendanceRecord = () => {
               <option>All Status</option>
               <option>On Time</option>
               <option>Late</option>
+              <option>Half Day</option>
               <option>Absent</option>
             </select>
             <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={18} />
           </div>
         </div>
 
-        {/* Attendance Table */}
+        {/* Table */}
         <div className="p-8 lg:px-12 overflow-x-auto min-h-100 relative">
           {loading ? (
              <div className="py-20 flex flex-col items-center justify-center space-y-4">
@@ -260,7 +306,7 @@ const AttendanceRecord = () => {
                     </td>
                     <td className={`py-6 px-6 border-y transition-colors ${isDark ? 'border-white/5 bg-white/1' : 'border-slate-100 bg-white'}`}>
                       <div className="flex items-center gap-2">
-                        <div className={`w-1.5 h-1.5 rounded-full ${rec.workHours >= 8 ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
+                        <div className={`w-1.5 h-1.5 rounded-full ${rec.workHours >= 8 ? 'bg-emerald-500' : rec.workHours >= 4 ? 'bg-amber-500' : 'bg-red-500'}`}></div>
                         <span className={`text-sm font-black ${titleText}`}>
                           {formatWorkHours(rec.workHours)}
                         </span>
@@ -274,12 +320,30 @@ const AttendanceRecord = () => {
                         <button onClick={() => { setSelectedRecord(rec); setIsViewModalOpen(true); }} className={`p-3 rounded-xl border transition-all ${isDark ? 'border-white/5 text-slate-500 hover:bg-[#7c3aed] hover:text-white' : 'border-slate-100 text-slate-400 hover:bg-[#7c3aed] hover:text-white'}`}>
                           <Eye size={18} strokeWidth={2.5} />
                         </button>
-                        <button onClick={() => { setSelectedRecord(rec); setIsEditModalOpen(true); }} className={`p-3 rounded-xl border transition-all ${isDark ? 'border-white/5 text-slate-500 hover:bg-[#7c3aed] hover:text-white' : 'border-slate-100 text-slate-400 hover:bg-[#7c3aed] hover:text-white'}`}>
+                        
+                        <button 
+                            onClick={() => {
+                                setSelectedRecord(rec);
+                                if (rec.isPlaceholder || String(rec.id).startsWith('temp-')) {
+                                    setIsAddModalOpen(true);
+                                } else {
+                                    setIsEditModalOpen(true);
+                                }
+                            }} 
+                            className={`p-3 rounded-xl border transition-all ${isDark ? 'border-white/5 text-slate-500 hover:bg-[#7c3aed] hover:text-white' : 'border-slate-100 text-slate-400 hover:bg-[#7c3aed] hover:text-white'}`}
+                        >
                           <Edit size={18} strokeWidth={2.5} />
                         </button>
-                        <button onClick={() => handleDelete(rec.id)} className={`p-3 rounded-xl border transition-all ${isDark ? 'border-white/5 text-slate-500 hover:bg-red-500 hover:text-white' : 'border-slate-100 text-slate-400 hover:bg-red-500 hover:text-white'}`}>
-                          <Trash2 size={18} strokeWidth={2.5} />
-                        </button>
+
+                        {/* --- DELETE BUTTON ONLY FOR REAL DB RECORDS --- */}
+                        {!rec.isPlaceholder && !String(rec.id).startsWith('temp-') && (
+                          <button 
+                            onClick={() => handleDelete(rec.id)} 
+                            className={`p-3 rounded-xl border transition-all ${isDark ? 'border-white/5 text-slate-500 hover:bg-red-500 hover:text-white' : 'border-slate-100 text-slate-400 hover:bg-red-500 hover:text-white'}`}
+                          >
+                            <Trash2 size={18} strokeWidth={2.5} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -294,21 +358,11 @@ const AttendanceRecord = () => {
         </div>
       </div>
 
-      <AddAttendanceRecordModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} theme={theme} onRefresh={fetchAttendance} />
-      <EditAttendanceRecordModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} theme={theme} data={selectedRecord} onRefresh={fetchAttendance} />
+      <AddAttendanceRecordModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} theme={theme} onRefresh={fetchAttendance} prefillData={selectedRecord} />
+      <EditAttendanceRecordModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} theme={theme} data={selectedRecord} currentFilterDate={dateFilter} onRefresh={fetchAttendance} />
       <ViewAttendanceRecordModal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} theme={theme} data={selectedRecord} />
     </main>
   );
-};
-
-const getStatusBadge = (status) => {
-    const base = "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border shadow-sm ";
-    switch(status) {
-      case 'On Time': return base + "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
-      case 'Late': return base + "bg-amber-500/10 text-amber-500 border-amber-500/20";
-      case 'Absent': return base + "bg-red-500/10 text-red-500 border-red-500/20";
-      default: return base + "bg-slate-500/10 text-slate-500 border-slate-500/20";
-    }
 };
 
 const StatCard = ({ icon, label, value, sub, color, isDark }) => {

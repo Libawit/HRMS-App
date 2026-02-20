@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 import { 
   X, Save, Calculator, ArrowUpCircle, 
   ArrowDownCircle, Calendar, Loader2, CheckCircle2, Clock
@@ -49,7 +49,7 @@ const EditSalary = ({ isOpen, onClose, salaryData, onSave, theme = 'dark' }) => 
     e.preventDefault();
     setLoading(true);
     try {
-      const response = await axios.patch(`http://localhost:3000/api/salaries/${formData.id}`, {
+      const response = await axios.patch(`http://localhost:5000/api/salaries/${formData.id}`, {
         ...formData,
         netPay: netPayPreview
       });

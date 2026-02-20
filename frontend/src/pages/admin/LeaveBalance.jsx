@@ -4,7 +4,7 @@ import {
   User, ChevronLeft, ChevronRight, Calendar, Hash, Loader2, Filter 
 } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 import { toast } from 'react-hot-toast';
 
 // External Modals
@@ -12,7 +12,7 @@ import AddLeaveBalanceModal from '../../modals/admin/AddLeaveBalance';
 import EditLeaveBalanceModal from '../../modals/admin/EditLeaveBalance';
 import ViewLeaveBalanceModal from '../../modals/admin/ViewLeaveBalance';
 
-const API_BASE = "http://localhost:3000/api";
+const API_BASE = "http://localhost:5000/api";
 
 const LeaveBalance = () => {
   const { theme } = useOutletContext();
@@ -36,34 +36,39 @@ const LeaveBalance = () => {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedBalance, setSelectedBalance] = useState(null);
 
-  // --- Fetch Departments (Using the same logic as Salary page) ---
-  useEffect(() => {
-    const fetchDepts = async () => {
-      try {
-        const res = await axios.get(`${API_BASE}/auth/departments`);
-        setDepartments(res.data);
-      } catch (err) {
-        console.error("Dept fetch error", err);
-      }
-    };
-    fetchDepts();
-  }, []);
-
-  // --- API Fetching ---
-  const fetchBalances = useCallback(async () => {
-    setLoading(true);
+  // --- Fetch Departments ---
+useEffect(() => {
+  const fetchDepts = async () => {
     try {
-      const response = await axios.get(`${API_BASE}/auth/leave-balances`, {
-        params: { year: currentYear }
+      const token = localStorage.getItem('token'); // Get the token
+      const res = await axios.get(`${API_BASE}/auth/departments`, {
+        headers: { Authorization: `Bearer ${token}` } // Send it here
       });
-      setBalances(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      console.error("Error fetching leave balances:", error);
-      setBalances([]); 
-    } finally {
-      setLoading(false);
+      setDepartments(res.data);
+    } catch (err) {
+      console.error("Dept fetch error", err);
     }
-  }, [currentYear]);
+  };
+  fetchDepts();
+}, []);
+
+// --- API Fetching Balances ---
+const fetchBalances = useCallback(async () => {
+  setLoading(true);
+  try {
+    const token = localStorage.getItem('token'); // Get the token
+    const response = await axios.get(`${API_BASE}/auth/leave-balances`, {
+      params: { year: currentYear },
+      headers: { Authorization: `Bearer ${token}` } // Send it here
+    });
+    setBalances(Array.isArray(response.data) ? response.data : []);
+  } catch (error) {
+    console.error("Error fetching leave balances:", error);
+    setBalances([]); 
+  } finally {
+    setLoading(false);
+  }
+}, [currentYear]);
 
   useEffect(() => {
     fetchBalances();
@@ -103,15 +108,18 @@ const LeaveBalance = () => {
   );
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this record?")) return;
-    try {
-      await axios.delete(`${API_BASE}/auth/leave-balances/${id}`);
-      toast.success("Deleted successfully");
-      fetchBalances();
-    } catch (error) {
-      toast.error("Failed to delete record");
-    }
-  };
+  if (!window.confirm("Are you sure you want to delete this record?")) return;
+  try {
+    const token = localStorage.getItem('token');
+    await axios.delete(`${API_BASE}/auth/leave-balances/${id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    toast.success("Deleted successfully");
+    fetchBalances();
+  } catch (error) {
+    toast.error("Failed to delete record");
+  }
+};
 
   // --- Style Constants ---
   const styles = {

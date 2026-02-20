@@ -33,7 +33,7 @@ const DeleteEmployeeModal = ({ isOpen, onClose, onConfirm, theme, employee }) =>
     setIsDeleting(true);
     try {
       // 1. Call your API (Ensure this route exists in authRoutes.js)
-      const response = await fetch(`http://localhost:3000/api/auth/employees/${employee.id}`, {
+      const response = await fetch(`http://localhost:5000/api/auth/employees/${employee.id}`, {
         method: 'DELETE',
       });
 

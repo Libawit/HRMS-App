@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 import { 
   Search, CloudUpload, FileText, Download, Edit, 
   MoreVertical, Eye, Trash2, FolderOpen, FileSignature, 
@@ -42,7 +42,7 @@ const Documents = () => {
   useEffect(() => {
     const fetchDepartments = async () => {
       try {
-        const response = await axios.get("http://localhost:3000/api/auth/departments");
+        const response = await axios.get("http://localhost:5000/api/auth/departments");
         setDepartments(response.data);
       } catch (error) {
         console.error("Error fetching departments:", error);
@@ -55,7 +55,7 @@ const Documents = () => {
   const fetchDocuments = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await axios.get("http://localhost:3000/api/documents", {
+      const response = await axios.get("http://localhost:5000/api/documents", {
         params: {
           category: currentCategory,
           departmentId: currentDepartment,
@@ -83,7 +83,7 @@ const Documents = () => {
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this record? This will remove the physical file as well.")) return;
     try {
-      await axios.delete(`http://localhost:3000/api/documents/${id}`);
+      await axios.delete(`http://localhost:5000/api/documents/${id}`);
       setFiles(prev => prev.filter(f => f.id !== id));
       setActiveMenu(null);
       setIsViewOpen(false); // Close view modal if open

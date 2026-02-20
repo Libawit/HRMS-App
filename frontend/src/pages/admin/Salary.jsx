@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, Filter, Loader2 
 } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 import { toast } from 'react-hot-toast';
 
 // Import Modals
@@ -14,7 +14,7 @@ import EditSalary from '../../modals/admin/EditSalary';
 import ViewSalary from '../../modals/admin/ViewSalary';
 
 // Change this to match your actual running backend port
-const API_BASE = "http://localhost:3000/api"; 
+const API_BASE = "http://localhost:5000/api"; 
 
 const Salary = () => {
   const context = useOutletContext();

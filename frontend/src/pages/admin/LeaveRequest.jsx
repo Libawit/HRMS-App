@@ -4,7 +4,7 @@ import {
   XCircle, Eye, Edit, Trash2, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 
 // External Modals
 import AddLeaveRequestModal from '../../modals/admin/AddLeaveRequest';
@@ -41,7 +41,7 @@ const LeaveRequest = () => {
   useEffect(() => {
     const fetchDepts = async () => {
       try {
-        const res = await axios.get('http://localhost:3000/api/auth/departments');
+        const res = await axios.get('http://localhost:5000/api/auth/departments');
         setDepartments(res.data);
       } catch (err) {
         console.error("Error fetching departments:", err);
@@ -53,7 +53,7 @@ const LeaveRequest = () => {
   const fetchRequests = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await axios.get('http://localhost:3000/api/auth/leave-requests', {
+      const res = await axios.get('http://localhost:5000/api/auth/leave-requests', {
         params: {
           month: viewDate.getMonth() + 1,
           year: viewDate.getFullYear()
@@ -90,7 +90,7 @@ const LeaveRequest = () => {
   const handleDelete = async (id) => {
     if (window.confirm("Delete this request? This cannot be undone.")) {
       try {
-        await axios.delete(`http://localhost:3000/api/auth/leave-requests/${id}`);
+        await axios.delete(`http://localhost:5000/api/auth/leave-requests/${id}`);
         fetchRequests();
       } catch (err) {
         alert("Delete failed");

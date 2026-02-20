@@ -11,7 +11,7 @@ import {
   Search
 } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 
 // Modals
 import AddLeaveCalendarModal from '../../modals/admin/AddLeaveCalendar';
@@ -40,29 +40,31 @@ const LeaveCalendar = () => {
   const [selectedLeave, setSelectedLeave] = useState(null);
 
   // --- API Fetching ---
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const year = currentDate.getFullYear();
-      const month = currentDate.getMonth() + 1;
-      
-      const [leavesRes, deptsRes, typesRes] = await Promise.all([
-        axios.get(`http://localhost:3000/api/auth/leave-requests/calendar`, {
-          params: { year, month, status: 'ALL' } // Added status: ALL to get everything
-        }),
-        axios.get(`http://localhost:3000/api/auth/departments`),
-        axios.get(`http://localhost:3000/api/auth/leave-types`)
-      ]);
+  // --- API Fetching ---
+const fetchData = useCallback(async () => {
+  setLoading(true);
+  try {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth() + 1;
+    
+    const [leavesRes, deptsRes, typesRes] = await Promise.all([
+      axios.get(`http://localhost:5000/api/auth/leave-requests/calendar`, {
+        // CHANGE THIS LINE: Set status to APPROVED
+        params: { year, month, status: 'APPROVED' } 
+      }),
+      axios.get(`http://localhost:5000/api/auth/departments`),
+      axios.get(`http://localhost:5000/api/auth/leave-types`)
+    ]);
 
-      setEvents(leavesRes.data);
-      setDepts(deptsRes.data);
-      setLeaveTypes(typesRes.data);
-    } catch (error) {
-      console.error("Fetch error:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentDate]);
+    setEvents(leavesRes.data);
+    setDepts(deptsRes.data);
+    setLeaveTypes(typesRes.data);
+  } catch (error) {
+    console.error("Fetch error:", error);
+  } finally {
+    setLoading(false);
+  }
+}, [currentDate]);
 
   useEffect(() => {
     fetchData();

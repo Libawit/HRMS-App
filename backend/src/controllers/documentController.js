@@ -6,21 +6,27 @@ const prisma = new PrismaClient();
 // --- 1. Get all documents with robust filtering ---
 exports.getDocuments = async (req, res) => {
   try {
-    const { category, departmentId, search } = req.query;
+    // Destructure userId from the query params
+    const { category, departmentId, search, userId } = req.query;
 
-    // Build dynamic filter object
     let whereClause = {};
 
-    // Only apply filters if they aren't 'all'
-    if (category && category !== 'all') {
-      whereClause.category = category;
+    // 1. Employee Filter: If userId is provided, strictly limit to that user
+    if (userId) {
+      whereClause.userId = userId;
     }
 
+    // 2. Department Filter: Only if not already restricted by userId
     if (departmentId && departmentId !== 'all') {
       whereClause.departmentId = departmentId;
     }
 
-    // Search logic: Search filename OR Employee First/Last Name
+    // 3. Category Filter
+    if (category && category !== 'all') {
+      whereClause.category = category;
+    }
+
+    // 4. Search Filter
     if (search) {
       whereClause.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -55,19 +61,19 @@ exports.getDocuments = async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
 
-    // Format for Frontend: Combine firstName/lastName into a single 'name' property
     const formattedDocs = documents.map(doc => ({
       ...doc,
-      user: {
+      user: doc.user ? {
         ...doc.user,
         name: `${doc.user.firstName} ${doc.user.lastName}`
-      }
+      } : { name: "Unknown Employee" }
     }));
 
-    res.status(200).json(formattedDocs);
+    res.status(200).json(formattedDocs || []);
+    
   } catch (error) {
     console.error("❌ FETCH ERROR:", error);
-    res.status(500).json({ error: "Error fetching documents", details: error.message });
+    res.status(500).json({ error: "Error fetching documents" });
   }
 };
 
@@ -191,7 +197,7 @@ exports.deleteDocument = async (req, res) => {
     }
 
     // 2. Extract filename from URL to delete from disk
-    // fileUrl looks like: http://localhost:3000/uploads/12345-file.pdf
+    // fileUrl looks like: http://localhost:5000/uploads/12345-file.pdf
     const filename = doc.fileUrl.split('/').pop();
     const filePath = path.join(__dirname, '../../uploads', filename);
 

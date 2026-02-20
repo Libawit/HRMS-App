@@ -3,167 +3,195 @@ import {
   X, 
   FileText, 
   Download, 
+  Calendar, 
   Printer, 
+  Trash2, 
   ShieldCheck,
   ExternalLink,
-  Building2,
-  Lock,
-  Eye
+  Info,
+  User
 } from 'lucide-react';
 
-const ViewDocuments = ({ isOpen, onClose, fileData, theme = 'dark' }) => {
+const ViewDocuments = ({ isOpen, onClose, fileData, onDelete, theme = 'dark' }) => {
   const iframeRef = useRef(null);
 
   if (!isOpen || !fileData) return null;
 
   // --- Handlers ---
   const handleDownload = () => {
-    // In production, use the actual signed URL from your storage provider
+    if (!fileData.fileUrl) return;
     const link = document.createElement('a');
-    link.href = '#'; 
+    link.href = fileData.fileUrl;
     link.setAttribute('download', fileData.name);
+    link.setAttribute('target', '_blank');
     document.body.appendChild(link);
     link.click();
     link.remove();
   };
 
   const handlePrint = () => {
-    if (iframeRef.current) {
-      iframeRef.current.contentWindow.print();
+    if (!fileData.fileUrl) return;
+    const printWindow = window.open(fileData.fileUrl, '_blank');
+    if (printWindow) {
+      printWindow.onload = () => {
+        printWindow.print();
+      };
+    } else {
+      alert("Please allow pop-ups to print this document.");
+    }
+  };
+
+  const handleDelete = () => {
+    // Managers should have a confirmation check for data integrity
+    if (window.confirm(`Are you sure you want to permanently delete this document for ${fileData.user?.name || 'this employee'}?`)) {
+      onDelete(fileData.id);
     }
   };
 
   // --- Theme Styles ---
   const isDark = theme === 'dark';
   const styles = {
-    overlay: "fixed inset-0 bg-[#020617]/95 backdrop-blur-md z-[3000] flex items-center justify-center p-4 md:p-10",
+    overlay: "fixed inset-0 bg-black/90 backdrop-blur-sm z-[3000] flex items-center justify-center p-4 md:p-6",
     card: isDark 
-      ? "bg-[#0b1220] border border-white/10 w-full max-w-7xl h-full rounded-[3rem] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col md:flex-row animate-in zoom-in-95 duration-300" 
-      : "bg-white border border-slate-200 w-full max-w-7xl h-full rounded-[3rem] overflow-hidden shadow-2xl flex flex-col md:flex-row",
+      ? "bg-[#0b1220] border border-white/10 w-full max-w-7xl h-[90vh] rounded-[2rem] overflow-hidden shadow-2xl flex flex-col md:flex-row animate-in zoom-in-95 duration-300" 
+      : "bg-white border border-slate-200 w-full max-w-7xl h-[90vh] rounded-[2rem] overflow-hidden shadow-2xl flex flex-col md:flex-row",
     sidebar: isDark ? "w-full md:w-80 border-r border-white/10 bg-[#0f172a]/50 p-8 flex flex-col" : "w-full md:w-80 border-r border-slate-200 bg-slate-50 p-8 flex flex-col",
-    label: "text-[10px] font-black text-[#94a3b8] uppercase tracking-[0.2em] mb-2",
-    value: `text-sm font-bold mb-6 ${isDark ? 'text-white' : 'text-slate-900'}`,
-    preview: isDark ? "flex-1 bg-[#020617] relative flex flex-col" : "flex-1 bg-slate-100 relative flex flex-col"
+    label: "text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest mb-1.5",
+    value: `text-sm font-semibold mb-6 ${isDark ? 'text-white' : 'text-slate-900'}`,
+    preview: isDark ? "flex-1 bg-[#020617] relative flex flex-col" : "flex-1 bg-slate-200 relative flex flex-col"
   };
+
+  const entryDate = new Date(fileData.createdAt).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
 
   return (
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.card} onClick={(e) => e.stopPropagation()}>
         
-        {/* SIDEBAR: Personal Metadata */}
+        {/* SIDEBAR: Managerial Context */}
         <aside className={styles.sidebar}>
           <div className="flex items-center gap-4 mb-10">
-            <div className="p-4 bg-[#7c3aed]/10 text-[#7c3aed] rounded-3xl">
-              <Eye size={32} />
+            <div className="p-3 bg-purple-500/10 text-purple-500 rounded-2xl">
+              <ShieldCheck size={28} />
             </div>
             <div>
-              <h3 className={`text-xl font-black tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>My File</h3>
-              <p className="text-[10px] text-emerald-500 font-black uppercase tracking-widest flex items-center gap-1">
-                <ShieldCheck size={12} /> Personal Record
+              <h3 className={`text-lg font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Manager View</h3>
+              <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest flex items-center gap-1">
+                Secure Access
               </p>
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-1">
-            <div className={styles.label}>Document Name</div>
-            <div className={styles.value}>{fileData.name}</div>
-
-            <div className={styles.label}>Ownership</div>
-            <div className="flex items-center gap-3 mb-6 bg-white/5 p-3 rounded-2xl border border-white/5">
-              <div className="w-8 h-8 rounded-xl bg-linear-to-br from-[#7c3aed] to-[#4f46e5] text-white flex items-center justify-center text-[10px] font-black">
-                {fileData.emp?.[0]}
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <div className={styles.label}>Employee Dossier</div>
+            <div className="flex items-center gap-3 mb-6 p-3 rounded-2xl bg-white/5 border border-white/5">
+              <div className="w-10 h-10 rounded-xl bg-linear-to-br from-[#7c3aed] to-[#4f46e5] text-white flex items-center justify-center text-xs font-black">
+                {fileData.user?.name ? fileData.user.name[0] : <User size={14}/>}
               </div>
-              <div>
-                <span className={`text-xs font-black block ${isDark ? 'text-white' : 'text-slate-900'}`}>{fileData.emp}</span>
-                <div className="flex items-center gap-1 text-[9px] text-[#94a3b8] font-bold uppercase">
-                  <Building2 size={10} /> Employee Vault
-                </div>
+              <div className="flex flex-col">
+                <span className={`text-sm font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{fileData.user?.name}</span>
+                <span className="text-[9px] font-bold text-purple-500 uppercase tracking-tighter">
+                  Dept: {fileData.department?.name || 'Department Member'}
+                </span>
               </div>
             </div>
+
+            <div className={styles.label}>Document Filename</div>
+            <div className={styles.value + " break-all"}>{fileData.name}</div>
 
             <div className={styles.label}>Category</div>
             <div className="mb-6">
-              <span className="text-[10px] font-black uppercase bg-[#7c3aed1a] text-[#7c3aed] px-4 py-2 rounded-xl border border-[#7c3aed22] inline-block tracking-widest">
-                {fileData.cat}
+              <span className="text-[9px] font-black uppercase bg-[#7c3aed1a] text-[#7c3aed] px-3 py-1.5 rounded-lg border border-[#7c3aed33] tracking-widest">
+                {fileData.category}
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-2 gap-4 mb-6 pt-4 border-t border-white/5">
               <div>
                 <div className={styles.label}>File Size</div>
-                <div className={`text-xs font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{fileData.size}</div>
+                <div className={`text-xs font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{fileData.size}</div>
               </div>
               <div>
-                <div className={styles.label}>Date Uploaded</div>
-                <div className={`text-xs font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{fileData.date}</div>
+                <div className={styles.label}>Entry Date</div>
+                <div className={`text-xs font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{entryDate}</div>
               </div>
             </div>
           </div>
 
-          {/* EMPLOYEE ACTION HUB (Removed Delete) */}
+          {/* MANAGER ACTIONS */}
           <div className="space-y-3 mt-8 pt-8 border-t border-white/5">
             <button 
               onClick={handleDownload}
-              className="w-full flex items-center justify-center gap-3 py-4 bg-[#7c3aed] hover:bg-[#6d28d9] text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-xl shadow-purple-500/20"
+              className="w-full flex items-center justify-center gap-3 py-3.5 bg-[#7c3aed] hover:bg-[#6d28d9] text-white rounded-2xl text-sm font-black transition-all active:scale-95 shadow-xl shadow-purple-500/20"
             >
-              <Download size={18} /> Export Copy
+              <Download size={18} /> Download
             </button>
             
-            <button 
-              onClick={handlePrint}
-              className={`w-full flex items-center justify-center gap-2 py-3.5 border ${isDark ? 'border-white/10' : 'border-slate-200'} rounded-2xl text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-white' : 'text-slate-700'} hover:bg-white/5 transition-all`}
-            >
-              <Printer size={16} /> Print Document
-            </button>
+            <div className="grid grid-cols-2 gap-3">
+              <button 
+                onClick={handlePrint}
+                className={`flex items-center justify-center gap-2 py-3 border border-white/10 rounded-xl text-xs font-bold ${isDark ? 'text-white' : 'text-slate-700'} hover:bg-white/5 transition-all`}
+              >
+                <Printer size={16} /> Print
+              </button>
+              <button 
+                onClick={handleDelete}
+                className="flex items-center justify-center gap-2 py-3 bg-red-500/10 text-red-500 rounded-xl text-xs font-bold hover:bg-red-500 hover:text-white transition-all"
+              >
+                <Trash2 size={16} /> Delete
+              </button>
+            </div>
           </div>
         </aside>
 
-        {/* PREVIEW PANEL */}
+        {/* PREVIEW AREA */}
         <div className={styles.preview}>
-          <div className={`flex items-center justify-between p-5 border-b ${isDark ? 'border-white/10 bg-[#0b1220]' : 'border-slate-200 bg-white'}`}>
-            <div className="flex items-center gap-4">
-              <div className="p-2 bg-emerald-500/10 text-emerald-500 rounded-xl">
-                <Lock size={16} />
-              </div>
-              <div className="flex flex-col">
-                <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${isDark ? 'text-white' : 'text-slate-800'}`}>
-                  Secure Preview Mode
-                </span>
-                <span className="text-[9px] text-[#94a3b8] font-bold uppercase tracking-widest mt-0.5">Protected Employee Data</span>
-              </div>
-            </div>
+          <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-white/10 bg-[#0b1220]' : 'border-slate-300 bg-white'}`}>
             <div className="flex items-center gap-3">
-              <button className={`p-3 rounded-2xl border border-white/5 hover:bg-white/10 transition-colors ${isDark ? 'text-white' : 'text-slate-600'}`}>
-                <ExternalLink size={20} />
+              <div className="p-2 bg-blue-500/10 text-blue-500 rounded-lg">
+                <Info size={14} />
+              </div>
+              <span className={`text-[9px] font-black uppercase tracking-[0.2em] ${isDark ? 'text-white/40' : 'text-slate-500'}`}>
+                Confidential Department Record
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => window.open(fileData.fileUrl, '_blank')}
+                className={`p-2.5 rounded-xl hover:bg-white/10 transition-colors ${isDark ? 'text-white' : 'text-slate-600'}`}
+                title="Open in new tab"
+              >
+                <ExternalLink size={18} />
               </button>
               <button 
                 onClick={onClose}
-                className="p-3 bg-white/5 hover:bg-red-500 text-[#94a3b8] hover:text-white rounded-2xl transition-all border border-white/5"
+                className={`p-2.5 rounded-xl hover:bg-red-500 hover:text-white transition-all ${isDark ? 'text-white' : 'text-slate-600'}`}
               >
                 <X size={20} />
               </button>
             </div>
           </div>
 
-          {/* PDF Frame */}
-          <div className="flex-1 p-8 overflow-hidden">
-            <div className={`w-full h-full rounded-4xl overflow-hidden shadow-2xl border-4 ${isDark ? 'border-[#1e293b]' : 'border-slate-300'}`}>
+          <div className="flex-1 p-4 md:p-8 bg-[#020617] overflow-hidden">
+            <div className={`w-full h-full rounded-2xl overflow-hidden shadow-2xl border ${isDark ? 'border-white/5' : 'border-slate-400'}`}>
               <iframe 
                 ref={iframeRef}
-                src={`/api/files/preview/${fileData.id}#toolbar=0&navpanes=0`} 
+                src={`${fileData.fileUrl}#toolbar=0&navpanes=0`} 
                 className="w-full h-full bg-white"
-                title="LyticalSMS Secure Viewer"
+                title="Manager Secure Viewer"
               />
             </div>
           </div>
           
-          <div className="p-5 text-center border-t border-white/5 bg-black/20">
-            <p className="text-[9px] text-[#475569] font-black tracking-[0.3em] uppercase">
-              Employee View Only • Hardware Encrypted Session • LyticalSMS v2.0
+          <div className="p-4 text-center border-t border-white/5 bg-[#0b1220]">
+            <p className="text-[9px] text-[#94a3b8] font-medium tracking-[0.2em] uppercase">
+              Management Portal • Vault v2.0 • Session Restricted
             </p>
           </div>
         </div>
-
       </div>
     </div>
   );

@@ -30,26 +30,38 @@ const AddDepartmentModal = ({ isOpen, onClose, onSuccess, theme = 'dark', depart
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('http://localhost:3000/api/auth/departments', {
+      // 1. Get the token from storage (Update the key 'token' if you named it differently)
+      const token = localStorage.getItem('token'); 
+
+      const response = await fetch('http://localhost:5000/api/auth/departments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          // 2. Add the Authorization Header
+          'Authorization': `Bearer ${token}` 
+        },
         body: JSON.stringify({
           ...formData,
-          // Convert empty string to null for database compatibility
           parentId: formData.parentId === "" ? null : formData.parentId 
         }),
       });
 
       if (response.ok) {
         setFormData({ name: '', parentId: '', manager: '', description: '' });
-        onSuccess(); // Refresh the list in parent
-        onClose();   // Close modal
+        onSuccess(); 
+        onClose();   
       } else {
         const err = await response.json();
-        alert(err.message || "Error creating department");
+        // If the error is 401, it means the token is missing or expired
+        if (response.status === 401) {
+          alert("Your session has expired. Please log in again.");
+        } else {
+          alert(err.message || "Error creating department");
+        }
       }
     } catch (error) {
       console.error("Submission error:", error);
+      alert("Network error. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

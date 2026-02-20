@@ -1,29 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { X, Briefcase, Layers, DollarSign, ListChecks, FileText, Trash2, Save, ShieldCheck } from 'lucide-react';
+import { X, Briefcase, DollarSign, ListChecks, FileText, Trash2, Save, ShieldCheck, Loader2 } from 'lucide-react';
+import api from '../../utils/axiosConfig'; // ✅ 1. Import your secure axios instance
 
-const EditJobPositionModal = ({ isOpen, onClose, theme = 'dark', data }) => {
-  // --- Auth Simulation ---
-  const managerDept = 'Engineering'; 
-
+const EditJobPositionModal = ({ isOpen, onClose, theme = 'dark', data, onSuccess }) => {
+  // --- State Management ---
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
-    dept: '',
     salary: '',
     requirements: '',
     description: ''
   });
 
+  // Sync state when data prop changes
   useEffect(() => {
     if (data) {
       setFormData({
-        title: data.title || data.name || '',
-        dept: data.dept || managerDept,
+        title: data.title || '',
         salary: data.salary || '',
         requirements: data.requirements || '',
         description: data.description || ''
       });
     }
-  }, [data, managerDept]);
+  }, [data]);
 
   if (!isOpen || !data) return null;
 
@@ -37,18 +36,44 @@ const EditJobPositionModal = ({ isOpen, onClose, theme = 'dark', data }) => {
     textMain: theme === 'dark' ? 'text-white' : 'text-slate-900'
   };
 
-  const handleUpdate = (e) => {
-    e.preventDefault();
-    // Managers can only update positions within their own dept scope
-    const updatedData = { ...formData, dept: managerDept };
-    console.log("Manager Updating Position:", updatedData);
-    onClose();
-  };
+  // ✅ 2. Secure Update Handler
+  const handleUpdate = async (e) => {
+  e.preventDefault();
+  setIsSubmitting(true);
+
+  try {
+    // 1. Prepare the payload with EVERYTHING the backend expects
+    const payload = {
+      title: formData.title,
+      salary: formData.salary,
+      requirements: formData.requirements,
+      description: formData.description,
+      // ✅ Critical: Your backend MUST have this ID to 'connect' the department
+      departmentId: data.departmentId || data.department?.id, 
+      // ✅ Add type because it's in your backend destructuring
+      type: data.type || 'Full-time' 
+    };
+
+    console.log("Sending Payload to Backend:", payload);
+
+    const response = await api.put(`/positions/${data.id}`, payload);
+
+    if (response.status === 200) {
+      if (typeof onSuccess === 'function') onSuccess();
+      onClose();
+    }
+  } catch (error) {
+    console.error("Update error:", error.response?.data);
+    alert(`Update Failed: ${error.response?.data?.error || "Unknown Error"}`);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
       <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-        {/* Modal Header */}
+        {/* Header */}
         <div className={styles.header}>
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-[#7c3aed]/10 rounded-2xl flex items-center justify-center text-[#7c3aed]">
@@ -59,7 +84,7 @@ const EditJobPositionModal = ({ isOpen, onClose, theme = 'dark', data }) => {
                 <h3 className={`text-xl font-black tracking-tight ${styles.textMain}`}>Edit Position</h3>
                 <span className="bg-emerald-500/10 text-emerald-500 text-[9px] font-black px-2 py-0.5 rounded border border-emerald-500/20 uppercase">Authorized</span>
               </div>
-              <p className="text-xs font-medium text-slate-500">Modify role details within {managerDept}</p>
+              <p className="text-xs font-medium text-slate-500">Updating role details</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-500/10 rounded-full transition-colors">
@@ -67,11 +92,9 @@ const EditJobPositionModal = ({ isOpen, onClose, theme = 'dark', data }) => {
           </button>
         </div>
 
-        {/* Modal Body */}
         <form onSubmit={handleUpdate} className="p-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
-            {/* Position Title */}
             <div className="md:col-span-2">
               <label className={styles.label}>Job Title</label>
               <div className="relative group">
@@ -86,25 +109,22 @@ const EditJobPositionModal = ({ isOpen, onClose, theme = 'dark', data }) => {
               </div>
             </div>
 
-            {/* Department (Locked for Manager) */}
             <div>
               <label className={styles.label}>Department (Fixed)</label>
               <div className="relative">
                 <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
                 <div className={`${styles.readOnlyInput} pl-12 flex items-center`}>
-                  {managerDept}
+                   {data.department?.name || 'Department'}
                 </div>
               </div>
             </div>
 
-            {/* Salary */}
             <div>
               <label className={styles.label}>Salary Range</label>
               <div className="relative group">
                 <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-[#7c3aed] transition-colors" size={18} />
                 <input 
                   type="text" 
-                  placeholder="e.g. $5k - $8k"
                   className={`${styles.input} pl-12`} 
                   value={formData.salary}
                   onChange={(e) => setFormData({...formData, salary: e.target.value})}
@@ -112,62 +132,27 @@ const EditJobPositionModal = ({ isOpen, onClose, theme = 'dark', data }) => {
               </div>
             </div>
 
-            {/* Requirements */}
             <div className="md:col-span-2">
               <label className={styles.label}>Core Requirements</label>
-              <div className="relative group">
-                <ListChecks className="absolute left-4 top-5 text-slate-500 group-focus-within:text-[#7c3aed] transition-colors" size={18} />
-                <textarea 
-                  className={`${styles.input} pl-12 min-h-25 resize-none leading-relaxed`} 
-                  placeholder="List skills, experience, and tools..."
-                  value={formData.requirements}
-                  onChange={(e) => setFormData({...formData, requirements: e.target.value})}
-                ></textarea>
-              </div>
-            </div>
-
-            {/* Description */}
-            <div className="md:col-span-2">
-              <label className={styles.label}>Role Description</label>
-              <div className="relative group">
-                <FileText className="absolute left-4 top-5 text-slate-500 group-focus-within:text-[#7c3aed] transition-colors" size={18} />
-                <textarea 
-                  className={`${styles.input} pl-12 min-h-30 resize-none leading-relaxed`} 
-                  placeholder="Detailed explanation of day-to-day tasks..."
-                  value={formData.description}
-                  onChange={(e) => setFormData({...formData, description: e.target.value})}
-                ></textarea>
-              </div>
+              <textarea 
+                className={`${styles.input} min-h-20 resize-none`} 
+                value={formData.requirements}
+                onChange={(e) => setFormData({...formData, requirements: e.target.value})}
+              ></textarea>
             </div>
           </div>
 
-          {/* Form Actions */}
-          <div className="flex flex-col sm:flex-row items-center justify-between mt-10 pt-8 border-t border-white/5 gap-4">
-            <button 
-              type="button"
-              className="flex items-center gap-2 text-red-500 text-[10px] font-black uppercase tracking-widest hover:bg-red-500/10 px-5 py-3 rounded-2xl transition-all w-full sm:w-auto justify-center"
-              onClick={() => { if(window.confirm('Confirm deletion of this role?')) onClose(); }}
-            >
-              <Trash2 size={16} /> Delete Role
+          <div className="flex items-center justify-end mt-10 pt-8 border-t border-white/5 gap-4">
+            <button type="button" onClick={onClose} className="px-8 py-3.5 text-xs font-black uppercase text-slate-400 hover:bg-white/5 rounded-2xl transition-all">
+              Discard
             </button>
-            
-            <div className="flex gap-3 w-full sm:w-auto">
-              <button 
-                type="button" 
-                onClick={onClose}
-                className={`flex-1 sm:flex-none px-8 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${
-                  theme === 'dark' ? 'text-slate-400 hover:bg-white/5' : 'text-slate-500 hover:bg-slate-100'
-                }`}
-              >
-                Discard
-              </button>
-              <button 
-                type="submit"
-                className="flex-1 sm:flex-none bg-[#7c3aed] hover:bg-[#6d28d9] text-white px-10 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-purple-500/20 transition-all flex items-center justify-center gap-2 active:scale-95"
-              >
-                <Save size={18} /> Save Changes
-              </button>
-            </div>
+            <button 
+              type="submit" 
+              disabled={isSubmitting}
+              className="bg-[#7c3aed] hover:bg-[#6d28d9] text-white px-10 py-3.5 rounded-2xl text-xs font-black uppercase shadow-xl transition-all flex items-center gap-2"
+            >
+              {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : <><Save size={18} /> Save Changes</>}
+            </button>
           </div>
         </form>
       </div>

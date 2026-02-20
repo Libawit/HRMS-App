@@ -1,11 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const jobPositionController = require('../controllers/jobPositionController');
+const { protect } = require('../middleware/authMiddleware'); // Import the guard
 
-// Ensure these names match the "exports.name" in the controller exactly
-router.get('/', jobPositionController.getPositions);
-router.post('/', jobPositionController.createPosition);
-router.put('/:id', jobPositionController.updatePosition); // <-- The crash was likely here
-router.delete('/:id', jobPositionController.deletePosition);
+// Use protect on the GET route
+router.get('/', protect, jobPositionController.getPositions); 
+router.post('/', protect, jobPositionController.createPosition);
+router.put('/:id', protect, jobPositionController.updatePosition);
+router.delete('/:id', protect, jobPositionController.deletePosition);
 
 module.exports = router;

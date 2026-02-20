@@ -1,197 +1,217 @@
 import React, { useRef } from 'react';
 import { 
-  X, Download, Printer, ShieldCheck, 
-  Building2, FileText, UserCheck, Info
+  X, Printer, ShieldCheck, Building2, 
+  CheckCircle2, Clock
 } from 'lucide-react';
 
 const ViewSalary = ({ isOpen, onClose, salaryData, theme = 'dark' }) => {
   const payslipRef = useRef(null);
-  const managerDept = "Engineering"; // Context-driven
-  const managerName = "Admin Manager"; // Context-driven
-
+  
   if (!isOpen || !salaryData) return null;
 
   const isDark = theme === 'dark';
 
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
   const handlePrint = () => {
-    const printContent = payslipRef.current.innerHTML;
-    const originalContent = document.body.innerHTML;
-    document.body.innerHTML = printContent;
     window.print();
-    document.body.innerHTML = originalContent;
-    window.location.reload(); 
   };
 
   const styles = {
-    overlay: "fixed inset-0 bg-[#020617]/95 backdrop-blur-xl z-[3000] flex items-center justify-center p-4 md:p-10",
-    container: `w-full max-w-6xl h-full max-h-[92vh] flex flex-col md:flex-row overflow-hidden rounded-[3.5rem] border ${isDark ? 'bg-[#0b1220] border-white/10' : 'bg-white border-slate-200'} shadow-2xl animate-in fade-in zoom-in-95 duration-300`,
-    sidebar: `w-full md:w-85 p-10 flex flex-col border-r ${isDark ? 'border-white/10 bg-[#0f172a]/50' : 'border-slate-200 bg-slate-50/50'}`,
-    label: "text-[10px] font-black text-[#94a3b8] uppercase tracking-[0.2em] block mb-2"
+    overlay: "fixed inset-0 bg-black/90 backdrop-blur-md z-[3000] flex items-center justify-center p-4 md:p-10",
+    container: `w-full max-w-5xl h-full max-h-[90vh] flex flex-col md:flex-row overflow-hidden rounded-[3rem] border ${isDark ? 'bg-[#0b1220] border-white/10' : 'bg-white border-slate-200'} shadow-2xl animate-in zoom-in-95 duration-300`,
+    sidebar: `w-full md:w-80 p-8 flex flex-col border-r ${isDark ? 'border-white/10 bg-[#0f172a]/50' : 'border-slate-200 bg-slate-50'}`,
+    label: "text-[10px] font-black text-[#94a3b8] uppercase tracking-widest block mb-1",
+    badge: (status) => {
+      if (status === 'PAID') return "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
+      if (status === 'VOID') return "bg-red-500/10 text-red-500 border-red-500/20";
+      return "bg-amber-500/10 text-amber-500 border-amber-500/20";
+    }
   };
 
   return (
     <div className={styles.overlay}>
       <div className={styles.container}>
         
-        {/* Managerial Summary Sidebar */}
+        {/* Left Action Sidebar */}
         <aside className={styles.sidebar}>
-          <div className="mb-10 text-center md:text-left">
-             <span className="inline-block px-3 py-1 rounded-full bg-[#7c3aed]/10 text-[#7c3aed] text-[9px] font-black uppercase tracking-widest mb-4">
-               {managerDept} Unit
-             </span>
-             <h3 className={`text-2xl font-black tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>
-               Reviewing Payroll
-             </h3>
-             <p className="text-xs text-[#94a3b8] font-medium mt-2">Final disbursement audit for {salaryData.emp}</p>
+          <div className="flex items-center gap-4 mb-10">
+            <div className="w-12 h-12 rounded-2xl bg-[#7c3aed] text-white flex items-center justify-center font-black shadow-lg shadow-purple-500/20">
+              {salaryData.user?.firstName?.[0] || 'E'}
+            </div>
+            <div>
+              <h3 className={`font-black text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                {salaryData.user?.firstName} {salaryData.user?.lastName}
+              </h3>
+              <p className="text-[10px] text-[#94a3b8] font-bold uppercase tracking-tighter">
+                {salaryData.user?.employeeId}
+              </p>
+            </div>
           </div>
 
-          <div className="flex-1 space-y-10">
-            <div className={`p-6 rounded-3xl ${isDark ? 'bg-white/5' : 'bg-white shadow-sm'}`}>
-              <label className={styles.label}>Net Payout</label>
-              <p className="text-4xl font-black text-[#7c3aed] tracking-tighter">${salaryData.net.toLocaleString()}</p>
-              <div className="mt-4 pt-4 border-t border-white/5 space-y-3">
-                 <div className="flex justify-between text-[10px] font-bold">
-                   <span className="text-[#94a3b8]">Gross Earnings</span>
-                   <span className={isDark ? 'text-white' : 'text-slate-900'}>${(salaryData.basic + salaryData.bonus).toLocaleString()}</span>
-                 </div>
-                 <div className="flex justify-between text-[10px] font-bold">
-                   <span className="text-[#94a3b8]">Total Deductions</span>
-                   <span className="text-red-500">-${salaryData.deductions.toLocaleString()}</span>
-                 </div>
+          <div className="flex-1 space-y-8">
+            <div>
+              <label className={styles.label}>Total Net Pay</label>
+              <p className="text-3xl font-black text-[#7c3aed] tracking-tighter">
+                ${salaryData.netPay?.toLocaleString()}
+              </p>
+              <div className={`mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest ${styles.badge(salaryData.status)}`}>
+                {salaryData.status === 'PAID' ? <CheckCircle2 size={10}/> : <Clock size={10}/>}
+                {salaryData.status}
               </div>
             </div>
 
-            <div className="space-y-4">
-               <div className="flex items-start gap-3 p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10">
-                 <Info size={16} className="text-blue-500 mt-0.5" />
-                 <div>
-                   <p className="text-[10px] font-black text-blue-500 uppercase">Manager Note</p>
-                   <p className="text-[11px] text-[#94a3b8] leading-relaxed mt-1">
-                     {salaryData.adjustmentReason || "Standard monthly processing. No manual adjustments recorded."}
-                   </p>
-                 </div>
-               </div>
+            <div className="space-y-4 pt-4 border-t border-white/5">
+              <div className="flex items-center justify-between text-xs font-bold">
+                <span className="text-[#94a3b8]">Basic Salary</span>
+                <span className={isDark ? 'text-white' : 'text-slate-900'}>${salaryData.amountBasic?.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs font-bold">
+                <span className="text-[#94a3b8]">Bonus</span>
+                <span className="text-emerald-500">+${salaryData.amountBonus?.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs font-bold">
+                <span className="text-[#94a3b8]">Deductions</span>
+                <span className="text-red-500">-${salaryData.deductions?.toLocaleString()}</span>
+              </div>
             </div>
           </div>
 
-          <div className="mt-8 space-y-3">
-            <button className="w-full flex items-center justify-center gap-3 py-5 bg-[#7c3aed] hover:bg-[#6d28d9] text-white rounded-4xl text-[10px] font-black uppercase tracking-widest transition-all shadow-xl shadow-purple-500/20 active:scale-95">
-              <Download size={18} /> Archive Record
+          <div className="mt-8">
+            <button 
+              onClick={handlePrint} 
+              className="w-full flex items-center justify-center gap-2 py-4 bg-[#7c3aed] hover:bg-[#6d28d9] text-white rounded-2xl text-xs font-black transition-all shadow-lg shadow-purple-500/20"
+            >
+              <Printer size={16} /> PRINT PAYSLIP
             </button>
-            <button onClick={handlePrint} className={`w-full flex items-center justify-center gap-3 py-5 border ${isDark ? 'border-white/10 hover:bg-white/5 text-white' : 'border-slate-200 hover:bg-slate-100 text-slate-600'} rounded-4xl text-[10px] font-black uppercase tracking-widest transition-all`}>
-              <Printer size={18} /> Print Document
-            </button>
+            <p className="text-[9px] text-center text-[#94a3b8] font-bold mt-4 uppercase tracking-tighter px-4">
+              Printer settings: Set "Layout" to Portrait and "Margins" to None for best results.
+            </p>
           </div>
         </aside>
 
-        {/* Professional Document Preview */}
-        <div className={`flex-1 p-6 md:p-12 overflow-y-auto custom-scrollbar ${isDark ? 'bg-[#020617]' : 'bg-slate-100'}`}>
-          <div className="flex justify-between items-center mb-10">
-            <div className="flex items-center gap-3 px-5 py-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
-              <UserCheck className="text-emerald-500" size={16} />
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500">Managerial Authorization Complete</span>
+        {/* Right Preview Area */}
+        <div className={`flex-1 p-6 md:p-12 overflow-y-auto no-scrollbar ${isDark ? 'bg-[#020617]' : 'bg-slate-100'}`}>
+          <div className="flex justify-between items-center mb-8">
+            <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+              <ShieldCheck className="text-emerald-500" size={14} />
+              <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500">Official ERP Record</span>
             </div>
-            <button onClick={onClose} className="p-4 hover:bg-white/10 rounded-full transition-all text-[#94a3b8] hover:text-white">
-              <X size={24} />
+            <button onClick={onClose} className="p-3 hover:bg-white/10 rounded-2xl transition-all text-[#94a3b8] hover:text-white">
+              <X size={20} />
             </button>
           </div>
 
-          {/* Payslip Canvas */}
-          <div ref={payslipRef} className="bg-white rounded-[3rem] p-12 text-slate-900 shadow-2xl min-h-full">
-            <div className="flex justify-between items-start border-b-2 border-slate-100 pb-12 mb-12">
+          {/* Printable Payslip Area */}
+          <div id="printable-payslip" ref={payslipRef} className="bg-white rounded-4xl p-10 text-slate-900 shadow-xl min-h-fit print:m-0 print:shadow-none">
+            <div className="flex justify-between items-start border-b-2 border-slate-100 pb-10 mb-10">
               <div>
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 bg-[#7c3aed] rounded-xl flex items-center justify-center text-white">
-                    <Building2 size={24} />
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 bg-[#7c3aed] rounded-lg flex items-center justify-center text-white">
+                    <Building2 size={18} />
                   </div>
-                  <h2 className="text-3xl font-black tracking-tighter">LyticalSMS</h2>
+                  <h2 className="text-2xl font-black tracking-tighter">HRMS</h2>
                 </div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em]">{managerDept} Operations Center</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Payroll Department</p>
               </div>
               <div className="text-right">
-                <p className="text-3xl font-black uppercase italic text-slate-100 mb-1 leading-none">Official Slips</p>
-                <p className="text-sm font-black text-[#7c3aed]">{salaryData.month}</p>
-                <p className="text-[10px] text-slate-400 font-bold mt-1">REF: #{salaryData.idNo}-{salaryData.id}</p>
+                <p className="text-lg font-black uppercase italic text-slate-200">Payslip</p>
+                <p className="text-xs font-bold text-slate-600">
+                  {months[salaryData.month]} {salaryData.year}
+                </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-16 mb-16">
+            <div className="grid grid-cols-2 gap-12 mb-12">
               <div>
-                <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest block mb-4">Recipient Information</label>
-                <div className="space-y-2">
-                  <p className="text-lg font-black">{salaryData.emp}</p>
-                  <p className="text-xs text-slate-500 font-bold">Employee ID: <span className="text-slate-900">{salaryData.idNo}</span></p>
-                  <p className="text-xs text-slate-500 font-bold">Department: <span className="text-slate-900">{managerDept}</span></p>
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2">Employee Details</label>
+                <div className="space-y-1">
+                  <p className="text-sm font-black text-slate-900">{salaryData.user?.firstName} {salaryData.user?.lastName}</p>
+                  <p className="text-xs text-slate-500 uppercase">ID: {salaryData.user?.employeeId}</p>
+                  <p className="text-xs text-slate-500 font-medium">Department: {salaryData.department?.name || 'General'}</p>
                 </div>
               </div>
               <div className="text-right">
-                <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest block mb-4">Processing Authority</label>
-                <div className="space-y-2">
-                  <p className="text-sm font-black text-slate-900">Authorized by: {managerName}</p>
-                  <p className="text-xs text-slate-500">Approval Date: {new Date().toLocaleDateString()}</p>
-                  <p className="text-xs text-slate-500 font-medium">Status: Disbursement Cleared</p>
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2">Disbursement Details</label>
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-slate-900 uppercase">Status: {salaryData.status}</p>
+                  <p className="text-xs text-slate-500">Ref: #{salaryData.id?.slice(-8).toUpperCase()}</p>
+                  <p className="text-xs text-slate-500">Issued: {new Date(salaryData.createdAt).toLocaleDateString()}</p>
                 </div>
               </div>
             </div>
 
-            <table className="w-full mb-12">
+            <table className="w-full mb-10">
               <thead>
-                <tr className="border-b-2 border-slate-100">
-                  <th className="text-left py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Pay Component</th>
-                  <th className="text-right py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Credit</th>
-                  <th className="text-right py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Debit</th>
+                <tr className="border-b border-slate-100">
+                  <th className="text-left py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Description</th>
+                  <th className="text-right py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Earnings</th>
+                  <th className="text-right py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Deductions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 <tr>
-                  <td className="py-6 text-xs font-bold text-slate-700 flex items-center gap-2">
-                    <FileText size={14} className="text-slate-300" /> Basic Compensation
-                  </td>
-                  <td className="py-6 text-right text-sm font-black text-slate-900">${salaryData.basic.toLocaleString()}</td>
-                  <td className="py-6 text-right text-sm font-bold text-slate-300">—</td>
+                  <td className="py-4 text-xs font-bold text-slate-700">Monthly Basic Salary</td>
+                  <td className="py-4 text-right text-xs font-bold text-slate-900">${salaryData.amountBasic?.toLocaleString()}</td>
+                  <td className="py-4 text-right text-xs font-bold text-slate-900">—</td>
                 </tr>
                 <tr>
-                  <td className="py-6 text-xs font-bold text-slate-700 flex items-center gap-2">
-                    <FileText size={14} className="text-slate-300" /> Unit Performance Bonus
-                  </td>
-                  <td className="py-6 text-right text-sm font-black text-emerald-600">+${salaryData.bonus.toLocaleString()}</td>
-                  <td className="py-6 text-right text-sm font-bold text-slate-300">—</td>
+                  <td className="py-4 text-xs font-bold text-slate-700">Performance Bonuses</td>
+                  <td className="py-4 text-right text-xs font-bold text-emerald-600">+${salaryData.amountBonus?.toLocaleString()}</td>
+                  <td className="py-4 text-right text-xs font-bold text-slate-900">—</td>
                 </tr>
                 <tr>
-                  <td className="py-6 text-xs font-bold text-slate-700 flex items-center gap-2">
-                    <FileText size={14} className="text-slate-300" /> Statutory Deductions
-                  </td>
-                  <td className="py-6 text-right text-sm font-bold text-slate-300">—</td>
-                  <td className="py-6 text-right text-sm font-black text-red-500">-${salaryData.deductions.toLocaleString()}</td>
+                  <td className="py-4 text-xs font-bold text-slate-700">Tax & Adjustments</td>
+                  <td className="py-4 text-right text-xs font-bold text-slate-900">—</td>
+                  <td className="py-4 text-right text-xs font-bold text-red-500">-${salaryData.deductions?.toLocaleString()}</td>
                 </tr>
               </tbody>
             </table>
 
-            <div className="bg-slate-900 rounded-4xl p-10 flex justify-between items-center text-white">
+            <div className="bg-slate-50 rounded-3xl p-8 flex justify-between items-center">
               <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2">Net Salary Disbursed</p>
-                <div className="flex items-center gap-2">
-                   <ShieldCheck size={16} className="text-emerald-400" />
-                   <p className="text-xs text-slate-300 font-medium">Verified by Departmental Head</p>
-                </div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Net Disbursed Amount</p>
+                <p className="text-xs text-slate-400 italic mt-1 font-medium">Verified electronic payment</p>
               </div>
               <div className="text-right">
-                <p className="text-4xl font-black tracking-tighter">${salaryData.net.toLocaleString()}</p>
+                <p className="text-3xl font-black text-[#7c3aed] tracking-tighter">
+                  ${salaryData.netPay?.toLocaleString()}
+                </p>
               </div>
             </div>
 
-            <div className="mt-16 pt-10 border-t-2 border-slate-100 flex justify-between items-center opacity-40">
-              <div className="text-[9px] font-black text-slate-400 uppercase max-w-xs leading-relaxed">
-                Security Warning: Confidential document. Unauthorized reproduction is strictly prohibited under corporate policy.
+            <div className="mt-16 pt-8 border-t border-slate-100 flex justify-between items-center opacity-40">
+              <div className="text-[7px] font-bold text-slate-400 uppercase max-w-50 leading-relaxed">
+                This document is a digital representation of the payroll record stored in the HRMS ERP system.
               </div>
               <div className="flex flex-col items-end">
-                <div className="w-24 h-8 bg-slate-100 rounded mb-2"></div>
-                <p className="text-[9px] font-black text-slate-400 uppercase">Manager Digital Seal</p>
+                <div className="w-12 h-12 bg-slate-100 rounded-lg mb-1"></div>
+                <p className="text-[8px] font-black text-slate-400">QR SECURE</p>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          body * { visibility: hidden; }
+          #printable-payslip, #printable-payslip * { visibility: visible; }
+          #printable-payslip {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            background: white !important;
+            padding: 20px !important;
+          }
+          /* Hide scrollbars during print */
+          ::-webkit-scrollbar { display: none; }
+        }
+      `}} />
     </div>
   );
 };

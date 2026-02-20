@@ -1,62 +1,20 @@
-// routes/departmentRoutes.js
 const express = require('express');
 const router = express.Router();
-const prisma = require('../config/db'); // Path to your prisma client
 const deptController = require('../controllers/deptController');
+const { protect } = require('../middleware/authMiddleware'); // <--- CRITICAL for req.user
 
-router.post('/departments', async (req, res) => {
-  try {
-    const { name, description, manager, parentId } = req.body;
+// GET all departments (Filtered by Role inside the controller)
+router.get('/departments', protect, deptController.getAllDepartments);
 
-    const newDept = await prisma.department.create({
-      data: {
-        name,
-        description,
-        manager,
-        // If parentId is an empty string, Prisma will fail unless you set it to null
-        parentId: parentId || null, 
-      }
-    });
+router.get('/my-department', protect, deptController.getManagerDepartment);
 
-    res.status(201).json(newDept);
-  } catch (error) {
-    console.error(error);
-    res.status(400).json({ message: "Could not create department. Check if name exists." });
-  }
-});
+// CREATE a new department
+router.post('/departments', protect, deptController.createDepartment);
 
+// UPDATE a department
+router.put('/departments/:id', protect, deptController.updateDepartment);
 
-// PUT /api/auth/departments/:id
-router.put('/departments/:id', async (req, res) => {
-  const { id } = req.params;
-  const { name, parentId, manager, description } = req.body;
-
-  try {
-    // 1. Basic Validation: Ensure we aren't creating a circular reference
-    if (parentId && parentId === id) {
-      return res.status(400).json({ message: "A department cannot be its own parent." });
-    }
-
-    // 2. Update Database (Example using Prisma)
-    const updatedDepartment = await prisma.department.update({
-      where: { id: id },
-      data: {
-        name,
-        parentId: parentId || null, // Ensure empty parent is null
-        manager,
-        description
-      }
-    });
-
-    res.json(updatedDepartment);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Failed to update department" });
-  }
-});
-
-router.get('/departments', deptController.getAllDepartments);
-router.post('/departments', deptController.createDepartment);
-router.delete('/departments/:id', deptController.deleteDepartment);
+// DELETE a department
+router.delete('/departments/:id', protect, deptController.deleteDepartment);
 
 module.exports = router;

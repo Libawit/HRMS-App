@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
+import api from '../../utils/axiosConfig'; // Ensure this path matches your axios config
 import { 
   Plus, 
   Search, 
@@ -11,7 +12,8 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  Loader2
 } from 'lucide-react';
 
 // Modals
@@ -22,11 +24,11 @@ const JobPosition = () => {
   // --- Context Integration ---
   const context = useOutletContext();
   const theme = context?.theme || 'dark';
-  
-  // FIXED: Fallback updated to 'ICT'
-  const managerDept = context?.managerDept || 'ICT'; 
+  const managerDept = context?.managerDept || 'Department'; 
 
   // --- State Management ---
+  const [positions, setPositions] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -36,14 +38,23 @@ const JobPosition = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
-  // --- Mock Data ---
-  // Note: Ensure your data includes 'ICT' entries to see them in the list
-  const [positions, setPositions] = useState([
-    { id: 1, title: 'Network Administrator', dept: 'ICT', salary: '$5,000 - $7,000', created: 'Jan 10, 2024', type: 'Full-time', requirements: 'Cisco Certified, Routing & Switching' },
-    { id: 2, title: 'IT Support Specialist', dept: 'ICT', salary: '$3,500 - $5,000', created: 'Feb 05, 2024', type: 'Full-time', requirements: 'Hardware Troubleshooting, Active Directory' },
-    { id: 3, title: 'Cybersecurity Analyst', dept: 'ICT', salary: '$7,500 - $11,000', created: 'Feb 12, 2024', type: 'Remote', requirements: 'CompTIA Security+, PenTesting' },
-    { id: 4, title: 'Senior Software Engineer', dept: 'Engineering', salary: '$8,000 - $12,000', created: 'Oct 15, 2023', type: 'Full-time', requirements: '5+ years Exp, React, Node.js' },
-  ]);
+  // --- Fetch Data from Backend ---
+  const fetchPositions = async () => {
+  try {
+    setLoading(true);
+    // Updated path to match the new server.js mount point
+    const response = await api.get('/positions'); 
+    setPositions(response.data);
+  } catch (error) {
+    console.error("Error fetching positions:", error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  useEffect(() => {
+    fetchPositions();
+  }, []);
 
   // --- Theme Styles ---
   const styles = {
@@ -56,17 +67,15 @@ const JobPosition = () => {
     badgeBg: theme === 'dark' ? 'bg-white/5' : 'bg-slate-100',
   };
 
-  // --- Manager Filtering Logic ---
+  // --- Filtering Logic (Search only, Backend handles Dept filter) ---
   const filteredPositions = useMemo(() => {
-    return positions.filter(pos => {
-      const isMyDept = pos.dept === managerDept;
-      const matchesSearch = pos.title.toLowerCase().includes(searchTerm.toLowerCase());
-      return isMyDept && matchesSearch;
-    });
-  }, [searchTerm, positions, managerDept]);
+    return positions.filter(pos => 
+      pos.title.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [searchTerm, positions]);
 
   // --- Pagination Logic ---
-  const totalPages = Math.ceil(filteredPositions.length / itemsPerPage);
+  const totalPages = Math.ceil(filteredPositions.length / itemsPerPage) || 1;
   const paginatedPositions = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     return filteredPositions.slice(start, start + itemsPerPage);
@@ -78,9 +87,14 @@ const JobPosition = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm("Delete this position? This action is permanent.")) {
-      setPositions(positions.filter(p => p.id !== id));
+      try {
+        await api.delete(`/auth/positions/${id}`);
+        setPositions(positions.filter(p => p.id !== id));
+      } catch (error) {
+        alert("Failed to delete position.");
+      }
     }
   };
 
@@ -95,13 +109,12 @@ const JobPosition = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <h1 className={`text-3xl font-black tracking-tight ${styles.textMain}`}>Manager Portal</h1>
+            <h1 className={`text-3xl font-black tracking-tight ${styles.textMain}`}>Job Positions</h1>
             <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 text-[10px] font-black border border-emerald-500/20 flex items-center gap-1">
-              <ShieldCheck size={12} /> DEPT ACCESS
+              <ShieldCheck size={12} /> {managerDept.toUpperCase()} ACCESS
             </span>
           </div>
-          {/* Dynamically renders ICT now */}
-          <p className={`text-sm ${styles.textMuted}`}>Manage roles and requirements for the <span className="font-bold text-[#7c3aed]">{managerDept}</span> department</p>
+          <p className={`text-sm ${styles.textMuted}`}>Manage roles and requirements for your department</p>
         </div>
         <button 
           onClick={() => setIsAddModalOpen(true)}
@@ -130,73 +143,80 @@ const JobPosition = () => {
         </div>
 
         {/* Table View */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className={`text-[11px] ${styles.textMuted} uppercase tracking-widest font-black border-b ${styles.border} bg-white/5`}>
-                <th className="p-5 w-16 text-center">#</th>
-                <th className="p-5">Job Details</th>
-                <th className="p-5">Salary Band</th>
-                <th className="p-5">Post Date</th>
-                <th className="p-5 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className={`divide-y ${styles.border}`}>
-              {paginatedPositions.map((pos, index) => (
-                <tr key={pos.id} className="hover:bg-[#7c3aed]/5 transition-colors group">
-                  <td className={`p-5 text-center font-bold ${styles.textMuted}`}>
-                    {(currentPage - 1) * itemsPerPage + index + 1}
-                  </td>
-                  <td className="p-5">
-                    <div className="flex items-start gap-4">
-                      <div className={`w-12 h-12 rounded-2xl ${styles.bgInput} border ${styles.border} flex items-center justify-center text-[#7c3aed] shrink-0 shadow-sm`}>
-                        <Briefcase size={22} />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className={`font-black text-[16px] tracking-tight ${styles.textMain}`}>{pos.title}</span>
-                        <div className="flex items-center gap-3 mt-1.5">
+        <div className="overflow-x-auto min-h-100">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Loader2 className="animate-spin text-[#7c3aed] mb-4" size={40} />
+              <p className={styles.textMuted}>Loading positions...</p>
+            </div>
+          ) : (
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className={`text-[11px] ${styles.textMuted} uppercase tracking-widest font-black border-b ${styles.border} bg-white/5`}>
+                  <th className="p-5 w-16 text-center">#</th>
+                  <th className="p-5">Job Details</th>
+                  <th className="p-5">Salary Band</th>
+                  <th className="p-5">Post Date</th>
+                  <th className="p-5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className={`divide-y ${styles.border}`}>
+                {paginatedPositions.map((pos, index) => (
+                  <tr key={pos.id} className="hover:bg-[#7c3aed]/5 transition-colors group">
+                    <td className={`p-5 text-center font-bold ${styles.textMuted}`}>
+                      {(currentPage - 1) * itemsPerPage + index + 1}
+                    </td>
+                    <td className="p-5">
+                      <div className="flex items-start gap-4">
+                        <div className={`w-12 h-12 rounded-2xl ${styles.bgInput} border ${styles.border} flex items-center justify-center text-[#7c3aed] shrink-0 shadow-sm`}>
+                          <Briefcase size={22} />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className={`font-black text-[16px] tracking-tight ${styles.textMain}`}>{pos.title}</span>
+                          <div className="flex items-center gap-3 mt-1.5">
                             <span className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${styles.badgeBg} ${styles.textMuted}`}>
                               <Clock size={12} /> {pos.type}
                             </span>
                             <span className={`text-[11px] ${styles.textMuted} font-medium line-clamp-1 opacity-70`}>{pos.requirements}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="p-5">
-                    <div className="flex items-center gap-1.5 font-black text-emerald-500 bg-emerald-500/5 w-fit px-3 py-1 rounded-lg border border-emerald-500/10">
-                      <DollarSign size={14} />
-                      {pos.salary}
-                    </div>
-                  </td>
-                  <td className="p-5">
-                    <div className={`flex items-center gap-2 ${styles.textMuted} font-bold text-[12px]`}>
-                      <Calendar size={14} />
-                      {pos.created}
-                    </div>
-                  </td>
-                  <td className="p-5">
-                    <div className="flex justify-end gap-2">
-                      <button 
-                        onClick={() => handleEdit(pos)}
-                        className="p-2.5 rounded-xl bg-blue-500/5 hover:bg-blue-500/20 text-blue-500 border border-blue-500/10 transition-all"
-                      >
-                        <Edit size={18} />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(pos.id)}
-                        className="p-2.5 rounded-xl bg-red-500/5 hover:bg-red-500/20 text-red-500 border border-red-500/10 transition-all"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </td>
+                    <td className="p-5">
+                      <div className="flex items-center gap-1.5 font-black text-emerald-500 bg-emerald-500/5 w-fit px-3 py-1 rounded-lg border border-emerald-500/10">
+                        <DollarSign size={14} />
+                        {pos.salary}
+                      </div>
+                    </td>
+                    <td className="p-5">
+                      <div className={`flex items-center gap-2 ${styles.textMuted} font-bold text-[12px]`}>
+                        <Calendar size={14} />
+                        {new Date(pos.createdAt).toLocaleDateString()}
+                      </div>
+                    </td>
+                    <td className="p-5">
+                      <div className="flex justify-end gap-2">
+                        <button 
+                          onClick={() => handleEdit(pos)}
+                          className="p-2.5 rounded-xl bg-blue-500/5 hover:bg-blue-500/20 text-blue-500 border border-blue-500/10 transition-all"
+                        >
+                          <Edit size={18} />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(pos.id)}
+                          className="p-2.5 rounded-xl bg-red-500/5 hover:bg-red-500/20 text-red-500 border border-red-500/10 transition-all"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
 
-          {filteredPositions.length === 0 && (
+          {!loading && filteredPositions.length === 0 && (
             <div className={`py-32 text-center ${styles.textMuted}`}>
               <Briefcase size={48} className="mx-auto mb-4 opacity-10" />
               <p className="text-sm font-black uppercase tracking-widest opacity-40">No positions found in {managerDept}</p>
@@ -205,7 +225,7 @@ const JobPosition = () => {
         </div>
 
         {/* Pagination */}
-        {filteredPositions.length > 0 && (
+        {!loading && filteredPositions.length > 0 && (
           <div className={`p-5 border-t ${styles.border} flex items-center justify-between bg-white/5`}>
             <div className={`text-[10px] font-black uppercase tracking-[0.2em] ${styles.textMuted}`}>
               Page {currentPage} of {totalPages}
@@ -231,21 +251,25 @@ const JobPosition = () => {
       </div>
 
       {/* Modals */}
-      <AddJobPositionModal 
-        isOpen={isAddModalOpen} 
-        onClose={() => setIsAddModalOpen(false)} 
-        theme={theme}
-        defaultDept={managerDept} 
-      />
+      {/* Modals */}
+<AddJobPositionModal 
+  isOpen={isAddModalOpen} 
+  onClose={() => setIsAddModalOpen(false)} 
+  onSuccess={fetchPositions} // ✅ Pass the function reference here
+  theme={theme}
+  defaultDept={managerDept} 
+  deptId={context?.managerDeptId} 
+/>
 
       {isEditModalOpen && (
-        <EditJobPositionModal 
-          isOpen={isEditModalOpen} 
-          onClose={() => setIsEditModalOpen(false)} 
-          theme={theme}
-          data={currentJob}
-        />
-      )}
+  <EditJobPositionModal 
+    isOpen={isEditModalOpen} 
+    onClose={() => setIsEditModalOpen(false)} 
+    onSuccess={fetchPositions} // ✅ This fixes the "is not a function" error
+    theme={theme}
+    data={currentJob}
+  />
+)}
     </main>
   );
 };

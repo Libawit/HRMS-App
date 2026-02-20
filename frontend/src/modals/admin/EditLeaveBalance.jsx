@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Loader2 } from 'lucide-react';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 
 const EditLeaveBalance = ({ isOpen, onClose, theme = 'dark', data }) => {
   // --- State ---
@@ -68,7 +68,7 @@ const EditLeaveBalance = ({ isOpen, onClose, theme = 'dark', data }) => {
         carriedOver: parseFloat(formData.carry)
       };
 
-      await axios.post('http://localhost:3000/api/auth/leave-balances', payload);
+      await axios.post('http://localhost:5000/api/auth/leave-balances', payload);
       onClose(); 
     } catch (error) {
       console.error("Update failed:", error.response?.data || error.message);
