@@ -1,45 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 const authController = require('../controllers/authController');
-const os = require('os');
-
 const { protect } = require('../middleware/authMiddleware');
+const { storage } = require('../config/cloudinary');// Import your Cloudinary config
 
-const uploadDir = 'uploads';
-
-// This check is the "shield". If the folder exists (because you pushed it), 
-// it skips the mkdirSync line and doesn't crash.
-if (!fs.existsSync(uploadDir)) {
-    console.log("Uploads folder missing, attempting to create...");
-    // Only try to create if we are NOT on Vercel
-    if (process.env.NODE_ENV !== 'production') {
-        fs.mkdirSync(uploadDir);
-    }
-}
-
-// 2. Configure Storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir); // Use the variable we defined above
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'profile-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-// 3. File Filter (Restrict to Images)
+// 1. Configure Multer with Cloudinary Storage
+// No more local 'uploads' folder logic needed!
 const upload = multer({
   storage: storage,
   fileFilter: (req, file, cb) => {
     const filetypes = /jpeg|jpg|png|webp/;
     const mimetype = filetypes.test(file.mimetype);
-    const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-
-    if (mimetype && extname) {
+    
+    if (mimetype) {
       return cb(null, true);
     }
     cb(new Error("Only images (JPG, PNG, WebP) are allowed!"));
@@ -48,7 +22,6 @@ const upload = multer({
 });
 
 // --- HELPER MIDDLEWARE: Handle Multer Errors ---
-// This prevents the app from crashing if the user uploads a file that's too big
 const handleUpload = (field) => {
   const uploadMiddleware = upload.single(field);
   
@@ -69,7 +42,7 @@ const handleUpload = (field) => {
 
 // --- API ROUTES ---
 
-// Registration (with image upload)
+// Registration (with Cloudinary image upload)
 router.post('/register', handleUpload('profileImage'), authController.register);
 
 // Authentication
@@ -79,16 +52,13 @@ router.post('/login', authController.login);
 router.get('/employees', protect, authController.getAllEmployees);
 router.get('/search-users', authController.getAllUsersForSearch);
 
-
-// Update Employee (with image upload)
-// 'profileImage' must match the key used in Frontend FormData.append('profileImage', file)
+// Update Employee (with Cloudinary image upload)
 router.patch('/employees/:id', handleUpload('profileImage'), authController.updateEmployee);
 
-router.get('/employees/:id/history', protect,authController.getEmployeeHistory);
+router.get('/employees/:id/history', protect, authController.getEmployeeHistory);
 
 // Delete Employee
 router.delete('/employees/:id', authController.deleteEmployee);
-
 
 router.get('/me', protect, authController.getMe);
 router.patch('/update-me', protect, handleUpload('profileImage'), authController.updateProfile);
@@ -99,7 +69,5 @@ router.get('/dashboard-stats', protect, authController.getDashboardStats);
 router.get('/structure', authController.getStructureData);
 router.get('/departments', protect, authController.getDepartments);
 router.get('/positions', authController.getPositions);
-
-
 
 module.exports = router;
