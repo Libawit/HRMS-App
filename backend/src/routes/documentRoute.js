@@ -4,25 +4,31 @@ const multer = require('multer');
 const { storage } = require('../config/cloudinary'); // Import your Cloudinary config
 const documentController = require('../controllers/documentController');
 
-// 1. Configure Multer with Cloudinary Storage
+// 1. SAFETY CHECK: Ensure storage isn't undefined before creating the multer instance
+if (!storage) {
+  console.error("❌ Document Routes: Cloudinary storage is undefined!");
+}
+
+// 2. Configure Multer with Cloudinary Storage
 const upload = multer({ 
   storage: storage,
   fileFilter: (req, file, cb) => {
-    // Keep your PDF-only restriction for documents
+    // PDF-only restriction for documents
     if (file.mimetype === "application/pdf") {
       cb(null, true);
     } else {
+      // Using an Error object ensures your catch blocks in the controller handle this properly
       cb(new Error("Only PDF files are allowed!"), false);
     }
   },
-  limits: { fileSize: 10 * 1024 * 1024 } // PDFs can be large, allowing up to 10MB
+  limits: { fileSize: 10 * 1024 * 1024 } // Allowing up to 10MB for PDFs
 });
 
 // --- ROUTES ---
 
 router.route('/')
   .get(documentController.getDocuments)
-  // 'file' matches the key used in your Frontend FormData.append('file', ...)
+  // Ensure the frontend uses .append('file', yourFile)
   .post(upload.single('file'), documentController.createDocument); 
 
 router.route('/:id')
