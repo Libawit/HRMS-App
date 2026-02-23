@@ -77,9 +77,13 @@ exports.register = async (req, res) => {
         where: { OR: [{ email }, { employeeId }, { nationalId }] }
     });
 
+    // Inside register logic
     if (existing) {
-        // Cloudinary cleanup if registration fails due to existing user
-        if (req.file) await cloudinary.uploader.destroy(req.file.filename); 
+        // CHANGE THIS: Only destroy if req.file exists and has a path
+        if (req.file && req.file.path) {
+            const publicId = req.file.filename; // Cloudinary uses filename as the public_id
+            await cloudinary.uploader.destroy(publicId).catch(err => console.log("Cleanup skipped"));
+        }
         return res.status(400).json({ message: 'Email, Employee ID, or National ID already exists' });
     }
 

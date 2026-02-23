@@ -1,6 +1,6 @@
 {
   "name": "hrms-backend",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
